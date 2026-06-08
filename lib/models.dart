@@ -28,6 +28,19 @@ class JobBatch {
     required this.initialQty,
     this.status = 'OPEN',
   });
+
+  // Maps incoming Flask tracking payloads directly to the object layer safely
+  factory JobBatch.fromJson(Map<String, dynamic> json) {
+    final rawQty = json['initial_qty'] ?? json['pcb_qty'] ?? 0;
+    return JobBatch(
+      batchNo: json['batch_no'] ?? '',
+      jobName: json['job_name'] ?? '',
+      clientName: json['client_name'] ?? '',
+      projectName: json['project_name'] ?? '',
+      initialQty: rawQty is num ? rawQty.toInt() : 0,
+      status: json['status'] ?? 'OPEN',
+    );
+  }
 }
 
 class LedgerEntry {
@@ -48,6 +61,19 @@ class LedgerEntry {
     required this.operator,
     required this.comments,
   });
+
+  factory LedgerEntry.fromJson(Map<String, dynamic> json) {
+    final rawQty = json['qty_transferred'] ?? 0;
+    return LedgerEntry(
+      batchNo: json['batch_no'] ?? '',
+      fromStage: json['from_stage'] ?? '',
+      toStage: json['to_stage'] ?? '',
+      qtyTransferred: rawQty is num ? rawQty.toInt() : 0,
+      timestamp: DateTime.tryParse(json['entry_timestamp'] ?? '') ?? DateTime.now(),
+      operator: json['operator_username'] ?? '',
+      comments: json['comments'] ?? '',
+    );
+  }
 }
 
 class FloorTarget {
@@ -62,4 +88,14 @@ class FloorTarget {
     required this.team,
     required this.targetQty,
   });
+
+  factory FloorTarget.fromJson(Map<String, dynamic> json) {
+    final rawQty = json['target_qty'] ?? 0;
+    return FloorTarget(
+      batchNo: json['batch_no'] ?? '',
+      segment: json['segment'] ?? '',
+      team: json['team'] ?? '',
+      targetQty: rawQty is num ? rawQty.toInt() : 0,
+    );
+  }
 }
