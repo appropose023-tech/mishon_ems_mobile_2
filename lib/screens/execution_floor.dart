@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../app_state.dart';
+import '../models.dart'; // Imports JobBatch and FloorTarget models
 
 class ExecutionFloorAssemblyView extends StatefulWidget {
   const ExecutionFloorAssemblyView({Key? key}) : super(key: key);
@@ -25,56 +26,60 @@ class _ExecutionFloorAssemblyViewState extends State<ExecutionFloorAssemblyView>
   final Map<String, double> _defectWeights = {};
 
   @override
-  void _processAuthentication(BuildContext context) async {
-    if (!_formKey.currentState!.validate()) return;
+  Widget build(BuildContext context) {
+    final state = Provider.of<EMSStateEngine>(context);
+    
+    // 1. Extract current clearance attributes for operational security mapping
+    final String role = (state.currentUser?.role ?? 'operator').trim().toLowerCase();
+    final String userTeam = state.currentUser?.team ?? 'None';
+    final String userSegment = state.currentUser?.segment ?? 'None';
 
-    setState(() => _isAuthenticating = true);
-    final state = Provider.of<EMSStateEngine>(context, listen: false);
+    // 2. Fetch all raw manufacturing items showing active status
+    List<JobBatch> openBatches = state.batches.where((b) => b.status == 'OPEN').toList();
 
-    // Properly await the network future response from your GCP server
-    bool pass = await state.authenticateUser(
-      _userController.text.trim(), 
-      _passController.text.trim()
-    );
+    // 3. If Operator/Supervisor, restrict dropdown options using the tracking matrix inside app_state
+    if (role != 'admin' && role != 'manager') {
+      final Set<String> authorizedBatchNos = state.targetingMatrix
+          .where((t) => t.team == userTeam || t.segment == userSegment)
+          .map((t) => t.batchNo)
+          .toSet();
 
-    setState(() => _isAuthenticating = false);
-
-    if (pass) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Authenticated: ${state.currentUser?.username.toUpperCase()} [Role: ${state.currentUser?.role.toUpperCase()}]"),
-          backgroundColor: const Color(0xFF008080),
-        ),
-      );
-      
-      // Navigates directly to the role-filtering engine inside dashboard.dart
-      Navigator.pushReplacement(
-        context, 
-        MaterialPageRoute(builder: (_) => const DashboardScreen())
-      );
-    } else {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Authentication Failed: Invalid credentials or offline terminal server."),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
+      openBatches = openBatches.where((b) => authorizedBatchNos.contains(b.batchNo)).toList();
     }
-  }
 
+    // 4. Verify physical security checkpoint barriers
     if (state.activePunchInTime == null) {
-      return const Center(child: Text("🔒 Access Blocked: Initialize active shift punch to display tracking interfaces.", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red)));
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24.0),
+          child: Text(
+            "🔒 Access Blocked: Initialize active shift punch to display tracking interfaces.", 
+            textAlign: TextAlign.center,
+            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red, fontSize: 16)
+          ),
+        ),
+      );
     }
 
     if (openBatches.isEmpty) {
-      return const Center(child: Text("No active manufacturing pipelines available inside profile allocations."));
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24.0),
+          child: Text(
+            "No active manufacturing pipelines available inside profile allocations.",
+            textAlign: TextAlign.center,
+            style: TextStyle(fontWeight: FontWeight.w500, color: Colors.grey)
+          ),
+        ),
+      );
     }
 
-    _selectedBatchNo ??= openBatches.first.batchNo;
+    // 5. Explicitly handle active batch reference pointer changes safely
+    if (_selectedBatchNo == null || !openBatches.any((b) => b.batchNo == _selectedBatchNo)) {
+      _selectedBatchNo = openBatches.first.batchNo;
+    }
+    
     final activeBatch = openBatches.firstWhere((b) => b.batchNo == _selectedBatchNo);
-
     int totalProcessed = state.getLayerRunningTotal(_selectedBatchNo!, _activeLayer);
     int balanceQty = activeBatch.initialQty - totalProcessed;
 
@@ -179,7 +184,7 @@ class _ExecutionFloorAssemblyViewState extends State<ExecutionFloorAssemblyView>
               onPressed: () {
                 int inputAmt = int.tryParse(_qtyController.text) ?? 0;
                 if (inputAmt > 0 && inputAmt <= balanceQty) {
-                  state.commitHourlyStatus(_selectedBatchNo!, _activeLayer, inputAmt,_commentController.text.trim());
+                  state.commitHourlyStatus(_selectedBatchNo!, _activeLayer, inputAmt, _commentController.text.trim());
                   _commentController.clear();
                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Performance block committed successfully to structural database.")));
                 } else {
