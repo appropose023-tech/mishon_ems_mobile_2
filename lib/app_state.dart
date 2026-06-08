@@ -63,7 +63,7 @@ class EMSStateEngine extends ChangeNotifier {
             batchNo: t['batch_no'] ?? '',
             segment: t['segment'] ?? '',
             team: t['team'] ?? '',
-            targetQty: rawQty is num ? rawQty.toInt() : 0;
+            targetQty: rawQty is num ? rawQty.toInt() : 0,
           );
         }).toList();
 
