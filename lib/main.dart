@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'app_state.dart';
 import 'screens/login_screen.dart';
+import 'screens/dashboard.dart';
 
 void main() {
   runApp(
@@ -13,7 +14,7 @@ void main() {
 }
 
 class MishonSolutionsEMSApplicationRoot extends StatelessWidget {
-  const MishonSolutionsEMSApplicationRoot({Key? key}) : super(key: key);
+  const MishonSolutionsEMSApplicationRoot({super.key}); // Modernized to super.key syntax
 
   @override
   Widget build(BuildContext context) {
@@ -30,7 +31,14 @@ class MishonSolutionsEMSApplicationRoot extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
+      // Set the initial home landing gate
       home: const IdentityGatewayPortal(),
+      
+      // Explicit Named Routing Table to support dashboard redirection chains safely
+      routes: {
+        '/login': (context) => const IdentityGatewayPortal(),
+        '/dashboard': (context) => const DashboardScreen(),
+      },
     );
   }
 }
