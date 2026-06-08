@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 
 class KitSynchronizerScreen extends StatelessWidget {
-  const ProfileProvisioningScreen({super.key});
+  const KitSynchronizerScreen({super.key}); // Constructor matches class name now
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(appBar: AppBar(title: const Text("Profile Provisioning Engine")), body: const Center(child: Text("System Interface Initializing...")));
+    return Scaffold(
+      appBar: AppBar(title: const Text("Kit Issue Sync Terminal")),
+      body: const Center(child: Text("Material Synchronization Interface Initializing...")),
+    );
   }
 }
