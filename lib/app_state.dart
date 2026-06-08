@@ -106,12 +106,15 @@ class EMSStateEngine extends ChangeNotifier {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         final u = data['user'];
+        
         currentUser = UserProfile(
           username: u['username'],
-          role: u['role'],
+          // Forces the string to trim trailing spaces and lowercase for absolute safety
+          role: (u['role'] ?? 'operator').toString().trim().toLowerCase(), 
           team: u['team'] ?? 'None',
           segment: u['segment'] ?? 'None',
         );
+        
         await fetchAndSyncFromBackend();
         return true;
       }
