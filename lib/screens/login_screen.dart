@@ -40,7 +40,7 @@ class _IdentityGatewayPortalState extends State<IdentityGatewayPortal> {
       );
       Navigator.pushReplacement(
         context, 
-        MaterialPageRoute(builder: (_) => const PrimaryDashboardRouter())
+        MaterialPageRoute(builder: (_) => const DashboardScreen())
       );
     } else {
       if (!mounted) return;
