@@ -4,7 +4,8 @@ import 'package:http/http.dart' as http;
 import 'models.dart'; 
 
 class EMSStateEngine extends ChangeNotifier {
-  final String baseUrl = "http://192.168.1.100:5050"; 
+  // Pointing directly to your GCP VM External IP on the active pipeline port
+  final String baseUrl = "http://104.154.76.47:5050"; 
   UserProfile? currentUser;
   DateTime? activePunchInTime;
   
