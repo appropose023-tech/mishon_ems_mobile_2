@@ -4,7 +4,6 @@ import 'package:http/http.dart' as http;
 import 'models.dart'; 
 
 class EMSStateEngine extends ChangeNotifier {
-  // Pointing directly to your GCP VM External IP on the active pipeline port
   final String baseUrl = "http://104.154.76.47:5050"; 
   UserProfile? currentUser;
   DateTime? activePunchInTime;
@@ -109,7 +108,6 @@ class EMSStateEngine extends ChangeNotifier {
         
         currentUser = UserProfile(
           username: u['username'],
-          // Forces the string to trim trailing spaces and lowercase for absolute safety
           role: (u['role'] ?? 'operator').toString().trim().toLowerCase(), 
           team: u['team'] ?? 'None',
           segment: u['segment'] ?? 'None',
@@ -149,11 +147,7 @@ class EMSStateEngine extends ChangeNotifier {
 
   /// Core shopfloor entry pipeline logging method
   Future<String?> logHourlyStatus(String batchNo, String side, int qty, String comments) async {
-    if (!processingCounters.containsKey(batchNo)) {
-      processingCounters[batchNo] = {"TOP": 0, "BOTTOM": 0};
-    }
-    processingCounters[batchNo]![side] = (processingCounters[batchNo]![side] ?? 0) + qty;
-    notifyListeners();
+    if (currentUser == null) return "No active operational user session found.";
 
     try {
       final response = await http.post(
@@ -169,8 +163,15 @@ class EMSStateEngine extends ChangeNotifier {
           "segment": currentUser!.segment
         }),
       );
+      
       final data = json.decode(response.body);
       if (response.statusCode == 200 && data['success'] == true) {
+        // Mutate local state configuration only after confirmed database synchronization
+        if (!processingCounters.containsKey(batchNo)) {
+          processingCounters[batchNo] = {"TOP": 0, "BOTTOM": 0};
+        }
+        processingCounters[batchNo]![side] = (processingCounters[batchNo]![side] ?? 0) + qty;
+        
         await fetchAndSyncFromBackend();
         return null;
       } else {
@@ -179,10 +180,6 @@ class EMSStateEngine extends ChangeNotifier {
     } catch (e) {
       return "Network connection issue reporting status data.";
     }
-  }
-
-  void commitHourlyStatus(String batchNo, String side, int amount, String comments) {
-    logHourlyStatus(batchNo, side, amount, comments);
   }
 
   Future<void> closeBatchProcessingBlock(String batchNo) async {
@@ -204,6 +201,8 @@ class EMSStateEngine extends ChangeNotifier {
   }
 
   Future<String?> executeLedgerTransfer(String batchNo, String fromStage, String toStage, int qty, String remarks) async {
+    if (currentUser == null) return "Authorization error: Missing active operational token.";
+
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/api/ledger_transfer'),
