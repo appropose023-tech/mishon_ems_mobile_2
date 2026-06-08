@@ -184,7 +184,7 @@ class _ExecutionFloorAssemblyViewState extends State<ExecutionFloorAssemblyView>
               onPressed: () {
                 int inputAmt = int.tryParse(_qtyController.text) ?? 0;
                 if (inputAmt > 0 && inputAmt <= balanceQty) {
-                  state.commitHourlyStatus(_selectedBatchNo!, _activeLayer, inputAmt, _commentController.text.trim());
+                  state.logHourlyStatus(_selectedBatchNo!, _activeLayer, inputAmt, _commentController.text.trim());
                   _commentController.clear();
                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Performance block committed successfully to structural database.")));
                 } else {
