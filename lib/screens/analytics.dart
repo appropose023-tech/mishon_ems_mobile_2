@@ -26,7 +26,7 @@ class _OperationalAnalyticsMatrixViewState extends State<OperationalAnalyticsMat
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (closedBatches.isNotEmpty) ...[
-            const Text("馃敂 Outbound Despatch Pending Approvals Request List", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF004d4d))),
+            const Text("Outbound Despatch Pending Approvals Request List", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF004d4d))),
             const SizedBox(height: 12),
             ...closedBatches.map((cb) => Card(
               color: Colors.amber[50],
@@ -44,7 +44,7 @@ class _OperationalAnalyticsMatrixViewState extends State<OperationalAnalyticsMat
             )).toList(),
             const Divider(height: 32),
           ],
-          const Text("馃幆 Inject Floor Target Routing Baseline Configurations", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF004d4d))),
+          const Text("Inject Floor Target Routing Baseline Configurations", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF004d4d))),
           const SizedBox(height: 12),
           TextFormField(controller: _targetBatchController, decoration: const InputDecoration(labelText: "Batch Code Identifier", border: OutlineInputBorder())),
           const SizedBox(height: 12),
@@ -86,7 +86,7 @@ class _OperationalAnalyticsMatrixViewState extends State<OperationalAnalyticsMat
             child: const Text("REGISTER TARGET PARAMETER", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           ),
           const Divider(height: 32),
-          const Text("馃搳 Comparative Yield Performance Reports vs Target Bounds", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF004d4d))),
+          const Text("Comparative Yield Performance Reports vs Target Bounds", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF004d4d))),
           const SizedBox(height: 12),
           ...state.targetingMatrix.map((tm) {
             return Card(
