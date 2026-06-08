@@ -25,9 +25,44 @@ class _ExecutionFloorAssemblyViewState extends State<ExecutionFloorAssemblyView>
   final Map<String, double> _defectWeights = {};
 
   @override
-  Widget build(BuildContext context) {
-    final state = Provider.of<EMSStateEngine>(context);
-    final openBatches = state.batches.where((b) => b.status == 'OPEN').toList();
+  void _processAuthentication(BuildContext context) async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _isAuthenticating = true);
+    final state = Provider.of<EMSStateEngine>(context, listen: false);
+
+    // Properly await the network future response from your GCP server
+    bool pass = await state.authenticateUser(
+      _userController.text.trim(), 
+      _passController.text.trim()
+    );
+
+    setState(() => _isAuthenticating = false);
+
+    if (pass) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Authenticated: ${state.currentUser?.username.toUpperCase()} [Role: ${state.currentUser?.role.toUpperCase()}]"),
+          backgroundColor: const Color(0xFF008080),
+        ),
+      );
+      
+      // Navigates directly to the role-filtering engine inside dashboard.dart
+      Navigator.pushReplacement(
+        context, 
+        MaterialPageRoute(builder: (_) => const DashboardScreen())
+      );
+    } else {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Authentication Failed: Invalid credentials or offline terminal server."),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    }
+  }
 
     if (state.activePunchInTime == null) {
       return const Center(child: Text("🔒 Access Blocked: Initialize active shift punch to display tracking interfaces.", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red)));
