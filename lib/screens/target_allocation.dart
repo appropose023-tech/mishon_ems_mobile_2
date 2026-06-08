@@ -1,9 +1,17 @@
 import 'package:flutter/material.dart';
 
 class TargetAllocationScreen extends StatelessWidget {
-  const ProfileProvisioningScreen({super.key});
+  const TargetAllocationScreen({super.key}); // Fixed constructor name to match class
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(appBar: AppBar(title: const Text("Profile Provisioning Engine")), body: const Center(child: Text("System Interface Initializing...")));
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text("Target Allocation Matrix"), // Fixed title context
+      ),
+      body: const Center(
+        child: Text("Line Assignments & Operational Targets Initializing..."),
+      ),
+    );
   }
 }
