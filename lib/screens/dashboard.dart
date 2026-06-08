@@ -1,106 +1,123 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../app_state.dart';
-import 'login_screen.dart';
-import 'shift_clock.dart';
-import 'execution_floor.dart';
+
+// Import all your feature screens directly
+import 'profile_provisioning.dart';
+import 'kit_synchronizer.dart';
 import 'ledger_transfer.dart';
+import 'target_allocation.dart';
+import 'billing_dispatch.dart';
 import 'analytics.dart';
+import 'execution_floor.dart';
+import 'shift_clock.dart';
 
-class PrimaryDashboardRouter extends StatefulWidget {
-  const PrimaryDashboardRouter({Key? key}) : super(key: key);
-
-  @override
-  State<PrimaryDashboardRouter> createState() => _PrimaryDashboardRouterState();
-}
-
-class _PrimaryDashboardRouterState extends State<PrimaryDashboardRouter> {
-  int _selectedIndex = 0;
+class DashboardScreen extends StatelessWidget {
+  const DashboardScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final state = Provider.of<EMSStateEngine>(context);
-    final user = state.currentUser;
+    final stateEngine = Provider.of<EMSStateEngine>(context);
+    final String role = (stateEngine.currentUser?.role ?? 'operator').trim().toLowerCase();
 
-    if (user == null) return const IdentityGatewayPortal();
-
-    bool isManagement = (user.role == 'admin' || user.role == 'manager');
-
-    // Establish dynamic runtime view options matrices based on profile credentials
-    final List<Widget> views = [];
-    final List<BottomNavigationBarItem> navigationTabs = [];
-
-    if (!isManagement) {
-      views.addAll([
-        const ShiftClockTerminalView(),
-        const ExecutionFloorAssemblyView(),
-        const InterDepartmentLedgerGatewayView(),
-      ]);
-      navigationTabs.addAll([
-        const BottomNavigationBarItem(icon: Icon(Icons.timer), label: "Shift Clock"),
-        const BottomNavigationBarItem(icon: Icon(Icons.precision_manufacturing), label: "Floor Entry"),
-        const BottomNavigationBarItem(icon: Icon(Icons.swap_horizontal_circle), label: "Trace Ledger"),
-      ]);
-    } else {
-      views.addAll([
-        const OperationalAnalyticsMatrixView(),
-        const InterDepartmentLedgerGatewayView(),
-      ]);
-      navigationTabs.addAll([
-        const BottomNavigationBarItem(icon: Icon(Icons.analytics), label: "Performance Hub"),
-        const BottomNavigationBarItem(icon: Icon(Icons.history_edu), label: "Ledger History"),
-      ]);
+    // 1. If Operator or Supervisor: Route them straight to their explicit shop floor utility loop
+    if (role != 'admin' && role != 'manager') {
+      return const OperatorSupervisorHub();
     }
+
+    // 2. If Management (Admin/Manager): Build the full system administration grid console
+    final bool isAdmin = (role == 'admin');
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Mishon Solutions EMS", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-        backgroundColor: const Color(0xFF004d4d),
+        title: Text("Mishon EMS Suite [${role.toUpperCase()}]"),
         actions: [
           IconButton(
-            icon: const Icon(Icons.logout, color: Colors.white),
+            icon: const Icon(Icons.logout),
             onPressed: () {
-              state.clearSession();
-              Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const IdentityGatewayPortal()));
+              stateEngine.currentUser = null;
+              Navigator.pushReplacementNamed(context, '/login');
             },
           )
         ],
       ),
-      body: Column(
+      body: GridView.count(
+        crossAxisCount: 2,
+        padding: const EdgeInsets.all(16),
+        crossAxisSpacing: 16,
+        mainAxisSpacing: 16,
         children: [
-          Container(
-            color: const Color(0xFF008080).withOpacity(0.1),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text("Operator: ${user.username.toUpperCase()}", style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF004d4d))),
-                Text("Dept: ${user.segment} [${user.team}]", style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF008080))),
-              ],
-            ),
-          ),
-          Expanded(child: views[_selectedIndex]),
-          Container(
-            width: double.infinity,
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              border: Border(top: BorderSide(color: Color(0xFF008080), width: 2)),
-            ),
-            padding: const EdgeInsets.all(8),
-            child: const Text(
-              "Mishon Solutions | www.mishonsolutions.com | contact: noreply@mishonsolutions.com +91 9223135678",
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 9, color: Color(0xFF004d4d), fontWeight: FontWeight.bold),
-            ),
-          ),
+          // Feature 1: Explicitly hidden from Managers
+          if (isAdmin)
+            _buildMenuCard(context, "1. Profile Provisioning", Icons.person_add, Colors.blue, const ProfileProvisioningScreen()),
+          
+          _buildMenuCard(context, "2. Kit Issue Sync", Icons.sync_alt, Colors.green, const KitSynchronizerScreen()),
+          _buildMenuCard(context, "3. Routing Assignment", Icons.alt_route, Colors.orange, const LedgerTransferScreen()),
+          _buildMenuCard(context, "4. Target Allocation", Icons.track_changes, Colors.deepPurple, const TargetAllocationScreen()),
+          _buildMenuCard(context, "5. Billing & Dispatch", Icons.local_shipping, Colors.red, const BillingDispatchScreen()),
+          _buildMenuCard(context, "6. System Analysis", Icons.analytics, Colors.teal, const AnalyticsScreen()),
         ],
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _selectedIndex,
-        selectedItemColor: const Color(0xFF008080),
-        unselectedItemColor: Colors.grey,
-        onTap: (index) => setState(() => _selectedIndex = index),
-        items: navigationTabs,
+    );
+  }
+
+  Widget _buildMenuCard(BuildContext context, String title, IconData icon, Color color, Widget targetScreen) {
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: InkWell(
+        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => targetScreen)),
+        borderRadius: BorderRadius.circular(12),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 44, color: color),
+            const SizedBox(height: 12),
+            Text(title, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// Fallback layout built explicitly for Floor Operators and Supervisors
+class OperatorSupervisorHub extends StatelessWidget {
+  const OperatorSupervisorHub({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text("EMS Shopfloor Console")),
+      body: Padding(
+         Parry: const EdgeInsets.all(16.0),
+        child: Column(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.timer, color: Colors.blue),
+              title: const Text("Shift Attendance System"),
+              subtitle: const Text("Clock In / Out of current production shift"),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ShiftClockScreen())),
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.precision_manufacturing, color: Colors.green),
+              title: const Text("Log Hourly Production Status"),
+              subtitle: const Text("Update execution quantities and yields"),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ExecutionFloorScreen())),
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.swap_horiz, color: Colors.orange),
+              title: const Text("Inter-Department Transfer"),
+              subtitle: const Text("Route batch components to next production sequence"),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const LedgerTransferScreen())),
+            ),
+          ],
+        ),
       ),
     );
   }
