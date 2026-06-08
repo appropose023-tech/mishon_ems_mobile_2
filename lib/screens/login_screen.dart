@@ -38,6 +38,8 @@ class _IdentityGatewayPortalState extends State<IdentityGatewayPortal> {
           backgroundColor: const Color(0xFF008080),
         ),
       );
+      
+      // Navigates directly to the role-filtering engine inside dashboard.dart
       Navigator.pushReplacement(
         context, 
         MaterialPageRoute(builder: (_) => const DashboardScreen())
