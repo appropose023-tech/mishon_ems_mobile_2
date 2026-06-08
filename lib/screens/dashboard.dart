@@ -56,7 +56,7 @@ class DashboardScreen extends StatelessWidget {
           _buildMenuCard(context, "3. Routing Assignment", Icons.alt_route, Colors.orange, const InterDepartmentLedgerGatewayView()),
           _buildMenuCard(context, "4. Target Allocation", Icons.track_changes, Colors.deepPurple, const TargetAllocationScreen()),
           _buildMenuCard(context, "5. Billing & Dispatch", Icons.local_shipping, Colors.red, const BillingDispatchScreen()),
-          _buildMenuCard(context, "6. System Analysis", Icons.analytics, Colors.teal, AnalyticsScreen()),
+          _buildMenuCard(context, "6. System Analysis", Icons.analytics, Colors.teal, OperationalAnalyticsMatrixView()),
         ],
       ),
     );
