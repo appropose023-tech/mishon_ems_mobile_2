@@ -55,7 +55,7 @@ class DashboardScreen extends StatelessWidget {
           _buildMenuCard(context, "3. Routing Assignment", Icons.alt_route, Colors.orange, const InterDepartmentLedgerGatewayView()),
           _buildMenuCard(context, "4. Target Allocation", Icons.track_changes, Colors.deepPurple, const TargetAllocationScreen()),
           _buildMenuCard(context, "5. Billing & Dispatch", Icons.local_shipping, Colors.red, const BillingDispatchScreen()),
-          _buildMenuCard(context, "6. System Analysis", Icons.analytics, Colors.teal, const AnalyticsScreen()),
+          _buildMenuCard(context, "6. System Analysis", Icons.analytics, Colors.teal, AnalyticsScreen()),
         ],
       ),
     );
@@ -98,7 +98,7 @@ class OperatorSupervisorHub extends StatelessWidget {
               title: const Text("Shift Attendance System"),
               subtitle: const Text("Clock In / Out of current production shift"),
               trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ShiftClockScreen())),
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => ShiftClockScreen())),
             ),
             const Divider(),
             ListTile(
