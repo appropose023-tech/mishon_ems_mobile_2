@@ -35,7 +35,8 @@ class DashboardScreen extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () {
-              stateEngine.currentUser = null;
+              // Gracefully wipes memory variables & targets route
+              stateEngine.clearSession();
               Navigator.pushReplacementNamed(context, '/login');
             },
           )
@@ -47,12 +48,11 @@ class DashboardScreen extends StatelessWidget {
         crossAxisSpacing: 16,
         mainAxisSpacing: 16,
         children: [
-          // Feature 1: Explicitly hidden from Managers
           if (isAdmin)
             _buildMenuCard(context, "1. Profile Provisioning", Icons.person_add, Colors.blue, const ProfileProvisioningScreen()),
           
           _buildMenuCard(context, "2. Kit Issue Sync", Icons.sync_alt, Colors.green, const KitSynchronizerScreen()),
-          _buildMenuCard(context, "3. Routing Assignment", Icons.alt_route, Colors.orange, const LedgerTransferScreen()),
+          _buildMenuCard(context, "3. Routing Assignment", Icons.alt_route, Colors.orange, const InterDepartmentLedgerGatewayView()),
           _buildMenuCard(context, "4. Target Allocation", Icons.track_changes, Colors.deepPurple, const TargetAllocationScreen()),
           _buildMenuCard(context, "5. Billing & Dispatch", Icons.local_shipping, Colors.red, const BillingDispatchScreen()),
           _buildMenuCard(context, "6. System Analysis", Icons.analytics, Colors.teal, const AnalyticsScreen()),
@@ -90,7 +90,7 @@ class OperatorSupervisorHub extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: const Text("EMS Shopfloor Console")),
       body: Padding(
-         Parry: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(16.0), // Fixed the "Parry" typo here
         child: Column(
           children: [
             ListTile(
@@ -106,7 +106,7 @@ class OperatorSupervisorHub extends StatelessWidget {
               title: const Text("Log Hourly Production Status"),
               subtitle: const Text("Update execution quantities and yields"),
               trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ExecutionFloorScreen())),
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ExecutionFloorAssemblyView())),
             ),
             const Divider(),
             ListTile(
@@ -114,7 +114,7 @@ class OperatorSupervisorHub extends StatelessWidget {
               title: const Text("Inter-Department Transfer"),
               subtitle: const Text("Route batch components to next production sequence"),
               trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const LedgerTransferScreen())),
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const InterDepartmentLedgerGatewayView())),
             ),
           ],
         ),
