@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'models.dart'; // Re-importing shared core application data structures
+import 'models.dart'; // Re-importing core data models structures safely
 
 class EMSStateEngine extends ChangeNotifier {
   final String baseUrl = "http://192.168.1.100:5030"; // Your Flask backend server IP address
   UserProfile? currentUser;
-  String? activePunchInTime;
   
-  // Exposing state containers to satisfy screen getters
+  // FIX 1: Shift back to DateTime? so shift_clock.dart type comparison evaluates perfectly
+  DateTime? activePunchInTime;
+  
   List<JobBatch> batches = [];
   List<LedgerEntry> materialLedger = [];
   List<FloorTarget> targetingMatrix = [];
@@ -17,10 +18,10 @@ class EMSStateEngine extends ChangeNotifier {
   bool isLoading = false;
 
   EMSStateEngine() {
-    // Optional local fallbacks can be initialized here if needed
+    // Core engine container ready
   }
 
-  /// Synchronizes all operational tables from the Flask database pipeline
+  /// Synchronizes operational database tables from Flask API pipeline
   Future<void> fetchAndSyncFromBackend() async {
     isLoading = true;
     notifyListeners();
@@ -40,7 +41,7 @@ class EMSStateEngine extends ChangeNotifier {
           status: b['status'] ?? 'OPEN',
         )).toList();
 
-        // 2. Sync Ledger entries (Resolves ledger_transfer.dart compile error)
+        // 2. Sync Ledger entries
         final List fetchedLedger = data['ledger'] ?? [];
         materialLedger = fetchedLedger.map((l) => LedgerEntry(
           batchNo: l['batch_no'] ?? '',
@@ -52,7 +53,7 @@ class EMSStateEngine extends ChangeNotifier {
           comments: l['comments'] ?? '',
         )).toList();
 
-        // 3. Sync Targeting bounds (Resolves analytics.dart compile error)
+        // 3. Sync Targeting bounds
         final List fetchedTargets = data['targets'] ?? [];
         targetingMatrix = fetchedTargets.map((t) => FloorTarget(
           batchNo: t['batch_no'] ?? '',
@@ -61,8 +62,20 @@ class EMSStateEngine extends ChangeNotifier {
           targetQty: t['target_qty'] ?? 0,
         )).toList();
 
-        // 4. Update local tracking counters to prevent interface calculation drops
-        _recalculateLocalProcessingCounters();
+        // 4. Safely rebuild performance counts if returned, else retain local runtime states
+        if (data.containsKey('hourly_logs')) {
+          processingCounters.clear();
+          final List hourlyLogs = data['hourly_logs'] ?? [];
+          for (var log in hourlyLogs) {
+            final bNo = log['batch_no'] ?? '';
+            final side = log['side'] ?? 'TOP';
+            final qty = log['qty_done'] ?? 0;
+            if (!processingCounters.containsKey(bNo)) {
+              processingCounters[bNo] = {"TOP": 0, "BOTTOM": 0};
+            }
+            processingCounters[bNo]![side] = (processingCounters[bNo]![side] ?? 0) + qty;
+          }
+        }
       }
     } catch (e) {
       debugPrint("Synchronization error pipeline down: $e");
@@ -71,17 +84,9 @@ class EMSStateEngine extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Internal utility to populate quantities for balance metrics on the shopfloor
-  void _recalculateLocalProcessingCounters() {
-    processingCounters.clear();
-    for (var entry in materialLedger) {
-      final bNo = entry.batchNo;
-      if (!processingCounters.containsKey(bNo)) {
-        processingCounters[bNo] = {"TOP": 0, "BOTTOM": 0};
-      }
-      // Increment top layer defaults as a safety fallback tracking method
-      processingCounters[bNo]!["TOP"] = (processingCounters[bNo]!["TOP"] ?? 0) + entry.qtyTransferred;
-    }
+  // FIX 2: Restores the specific capacity counter getter method needed by execution_floor.dart:43
+  int getLayerRunningTotal(String batchNo, String side) {
+    return processingCounters[batchNo]?[side] ?? 0;
   }
 
   Future<bool> authenticateUser(String username, String password) async {
@@ -122,7 +127,9 @@ class EMSStateEngine extends ChangeNotifier {
       );
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        activePunchInTime = isPunchIn ? data['time'] : null;
+        
+        // FIX 1 (Continued): Parse string timestamp seamlessly into localized DateTime object
+        activePunchInTime = isPunchIn ? DateTime.tryParse(data['time'] ?? '') : null;
         notifyListeners();
         return true;
       }
@@ -132,8 +139,15 @@ class EMSStateEngine extends ChangeNotifier {
     return false;
   }
 
-  /// Core shopfloor entry pipeline method
+  /// Core shopfloor entry pipeline logging method
   Future<String?> logHourlyStatus(String batchNo, String side, int qty, String comments) async {
+    // Responsively update state interface locally before posting to prevent lagging metrics
+    if (!processingCounters.containsKey(batchNo)) {
+      processingCounters[batchNo] = {"TOP": 0, "BOTTOM": 0};
+    }
+    processingCounters[batchNo]![side] = (processingCounters[batchNo]![side] ?? 0) + qty;
+    notifyListeners();
+
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/api/log_hourly'),
@@ -160,12 +174,30 @@ class EMSStateEngine extends ChangeNotifier {
     }
   }
 
-  /// Backward-compatible synchronous wrapper mapping to original execution_floor.dart requirements
-  void commitHourlyStatus(String batchNo, String side, int qty) {
-    logHourlyStatus(batchNo, side, qty, "Automated Shopfloor Terminal entry");
+  // FIX 4: Exposes a 4-argument positional facade matching the call signature in execution_floor.dart:147
+  void commitHourlyStatus(String batchNo, String side, int amount, String comments) {
+    logHourlyStatus(batchNo, side, amount, comments);
   }
 
-  /// Triggers inter-department routing operations
+  // FIX 3: Restores the batch terminal closure pipeline requested by execution_floor.dart:103
+  Future<void> closeBatchProcessingBlock(String batchNo) async {
+    final idx = batches.indexWhere((element) => element.batchNo == batchNo);
+    if (idx != -1) {
+      batches[idx].status = 'CLOSED';
+      notifyListeners();
+    }
+    try {
+      await http.post(
+        Uri.parse('$baseUrl/api/close_batch'),
+        headers: {"Content-Type": "application/json"},
+        body: json.encode({"batch_no": batchNo, "status": "CLOSED"}),
+      );
+      await fetchAndSyncFromBackend();
+    } catch (e) {
+      debugPrint("Failed to transmit batch state close event: $e");
+    }
+  }
+
   Future<String?> executeLedgerTransfer(String batchNo, String fromStage, String toStage, int qty, String remarks) async {
     try {
       final response = await http.post(
@@ -192,7 +224,18 @@ class EMSStateEngine extends ChangeNotifier {
     }
   }
 
-  /// Handles pending outbound dispatch state updates (Resolves analytics.dart compile error)
+  // FIX 5: Explicitly bridges named arguments inside ledger_transfer.dart:117 back into the network handler
+  Future<String?> injectLedgerTransaction({
+    required String batchNo,
+    required String fromStage,
+    required String toStage,
+    required int qty,
+    required String operator,
+    required String remarks,
+  }) async {
+    return await executeLedgerTransfer(batchNo, fromStage, toStage, qty, remarks);
+  }
+
   Future<void> dispatchBillingClearance(String batchNo) async {
     final idx = batches.indexWhere((element) => element.batchNo == batchNo);
     if (idx != -1) {
@@ -211,7 +254,6 @@ class EMSStateEngine extends ChangeNotifier {
     }
   }
 
-  /// Registers fresh floor production parameters inside database tables (Resolves analytics.dart compile error)
   Future<void> provisionNewTarget(String batchNo, String segment, String team, int targetQty) async {
     try {
       await http.post(
@@ -227,7 +269,6 @@ class EMSStateEngine extends ChangeNotifier {
       await fetchAndSyncFromBackend();
     } catch (e) {
       debugPrint("Failed to register target parameter: $e");
-      // Fallback local addition to avoid system execution lag if offline
       targetingMatrix.add(FloorTarget(batchNo: batchNo, segment: segment, team: team, targetQty: targetQty));
       notifyListeners();
     }
