@@ -99,7 +99,7 @@ class OperatorSupervisorHub extends StatelessWidget {
               title: const Text("Shift Attendance System"),
               subtitle: const Text("Clock In / Out of current production shift"),
               trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => ShiftClockScreen())),
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => ShiftClockTerminalView())),
             ),
             const Divider(),
             ListTile(
