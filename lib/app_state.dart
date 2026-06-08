@@ -4,7 +4,7 @@ import 'package:http/http.dart' as http;
 import 'models.dart'; 
 
 class EMSStateEngine extends ChangeNotifier {
-  final String baseUrl = "http://192.168.1.100:5030"; 
+  final String baseUrl = "http://192.168.1.100:5050"; 
   UserProfile? currentUser;
   DateTime? activePunchInTime;
   
