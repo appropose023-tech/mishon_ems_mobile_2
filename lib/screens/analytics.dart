@@ -69,8 +69,8 @@ class _OperationalAnalyticsMatrixViewState extends State<OperationalAnalyticsMat
                           trailing: ElevatedButton(
                             style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF008080)),
                             onPressed: () async {
-                              // Corrected to match your exact app_state.dart method name: transmitBatchStateCloseEvent
-                              await state.transmitBatchStateCloseEvent(cb.batchNo);
+                              // Fixed: Named to match your exact engine definition method name
+                              await state.transmitBatchCloseEvent(cb.batchNo);
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(content: Text("Batch clearance status transmission successful."))
                               );
