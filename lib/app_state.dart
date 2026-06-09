@@ -238,4 +238,29 @@ class EMSStateEngine extends ChangeNotifier {
     required String toStage,
     required int qty,
     required String operator,
-    required String remarks,
+    required String comments,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/ledger_transfer'),
+        headers: {"Content-Type": "application/json"},
+        body: json.encode({
+          "batch_no": batchNo,
+          "from_stage": fromStage,
+          "to_stage": toStage,
+          "qty": qty,
+          "operator": operator,
+          "comments": comments
+        }),
+      );
+      final data = json.decode(response.body);
+      if (response.statusCode == 200 && data['success'] == true) {
+        await fetchAndSyncFromBackend();
+        return null; // Return null on complete success
+      } else {
+        return data['message'] ?? "Failed to save transaction.";
+      }
+    } catch (e) {
+      return "Network communication failure: $e";
+    }
+  }
