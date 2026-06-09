@@ -32,74 +32,50 @@ class EMSStateEngine extends ChangeNotifier {
         
         // 1. Sync Batches
         final List fetchedBatches = data['batches'] ?? data['job_batches'] ?? [];
-        batches = fetchedBatches.map((b) {
-          final rawQty = b['initial_qty'] ?? b['pcb_qty'] ?? 0;
-          return JobBatch(
-            batchNo: b['batch_no']?.toString() ?? '',
-            jobName: b['job_name']?.toString() ?? b['job_code']?.toString() ?? '',
-            clientName: b['client_name']?.toString() ?? '',
-            projectName: b['project_name']?.toString() ?? '',
-            initialQty: rawQty is num ? rawQty.toInt() : (int.tryParse(rawQty.toString()) ?? 0),
-            status: b['status']?.toString() ?? 'OPEN',
-          );
-        }).toList();
-
-        // 2. Sync Ledger entries
-        final List fetchedLedger = data['ledger'] ?? data['material_ledger'] ?? [];
-        materialLedger = fetchedLedger.map((l) {
-          final rawQty = l['qty_transferred'] ?? l['qty'] ?? 0;
-          return LedgerEntry(
-            batchNo: l['batch_no']?.toString() ?? '',
-            fromStage: l['from_stage']?.toString() ?? '',
-            toStage: l['to_stage']?.toString() ?? '',
-            qtyTransferred: rawQty is num ? rawQty.toInt() : (int.tryParse(rawQty.toString()) ?? 0),
-            timestamp: DateTime.tryParse(l['entry_timestamp']?.toString() ?? l['timestamp']?.toString() ?? '') ?? DateTime.now(),
-            operator: l['operator_username']?.toString() ?? l['operator']?.toString() ?? '',
-            comments: l['comments']?.toString() ?? '',
-          );
-        }).toList();
-
-        // 3. Sync Targeting bounds
+        batches = fetchedBatches.map((b) => JobBatch.fromJson(b)).toList();
+        
+        // 2. Sync Floor Targets Matrix
         final List fetchedTargets = data['targets'] ?? data['floor_targets'] ?? [];
-        targetingMatrix = fetchedTargets.map((t) {
-          final rawQty = t['target_qty'] ?? t['qty'] ?? 0;
-          return FloorTarget(
-            batchNo: t['batch_no']?.toString() ?? '',
-            segment: t['segment']?.toString() ?? '',
-            team: t['team']?.toString() ?? '',
-            targetQty: rawQty is num ? rawQty.toInt() : (int.tryParse(rawQty.toString()) ?? 0),
-          );
-        }).toList();
+        targetingMatrix = fetchedTargets.map((t) => FloorTarget.fromJson(t)).toList();
+        
+        // 3. Sync Inter-Department Material Ledger
+        final List fetchedLedger = data['ledger'] ?? data['material_ledger'] ?? [];
+        materialLedger = fetchedLedger.map((l) => LedgerEntry.fromJson(l)).toList();
 
-        // 4. Rebuild performance counters safely
-        final List hourlyLogs = data['hourly_logs'] ?? data['production_logs'] ?? [];
-        processingCounters.clear();
-        for (var log in hourlyLogs) {
-          final bNo = log['batch_no']?.toString() ?? '';
-          final side = log['side']?.toString() ?? 'TOP';
-          final rawQty = log['qty_done'] ?? log['qty'] ?? 0;
-          final int qty = rawQty is num ? rawQty.toInt() : (int.tryParse(rawQty.toString()) ?? 0);
+        // 4. Compute Dynamic Progress Counters for Operators
+        final List fetchedHourlyLogs = data['hourly_logs'] ?? data['hourly_status_logs'] ?? [];
+        Map<String, Map<String, int>> newCounters = {};
+        for (var log in fetchedHourlyLogs) {
+          String bNo = log['batch_no'] ?? '';
+          String layer = log['placement_layer'] ?? 'TOP';
+          int qty = (log['qty_processed'] ?? 0) is num ? (log['qty_processed'] as num).toInt() : 0;
           
-          if (bNo.isNotEmpty) {
-            if (!processingCounters.containsKey(bNo)) {
-              processingCounters[bNo] = {"TOP": 0, "BOTTOM": 0};
-            }
-            processingCounters[bNo]![side] = (processingCounters[bNo]![side] ?? 0) + qty;
+          if (!newCounters.containsKey(bNo)) {
+            newCounters[bNo] = {"TOP": 0, "BOTTOM": 0};
+          }
+          if (newCounters[bNo]!.containsKey(layer)) {
+            newCounters[bNo]![layer] = newCounters[bNo]![layer]! + qty;
           }
         }
+        processingCounters = newCounters;
       }
     } catch (e) {
-      debugPrint("🚨 PIPELINE CRASH: $e");
+      debugPrint("💥 Critical State Sync Failure: $e");
     } finally {
       isLoading = false;
       notifyListeners();
     }
   }
 
-  int getLayerRunningTotal(String batchNo, String side) {
-    return processingCounters[batchNo]?[side] ?? 0;
+  /// Calculates real-time running output totals for specific component configurations
+  int getLayerRunningTotal(String batchNo, String layer) {
+    if (processingCounters.containsKey(batchNo) && processingCounters[batchNo]!.containsKey(layer)) {
+      return processingCounters[batchNo]![layer]!;
+    }
+    return 0;
   }
 
+  /// Handles user access validation mapping against your server infrastructure
   Future<bool> authenticateUser(String username, String password) async {
     try {
       final response = await http.post(
@@ -107,91 +83,78 @@ class EMSStateEngine extends ChangeNotifier {
         headers: {"Content-Type": "application/json"},
         body: json.encode({"username": username, "password": password}),
       );
+      
       if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        final u = data['user'];
-        
-        currentUser = UserProfile(
-          username: u['username']?.toString() ?? '',
-          role: (u['role'] ?? 'operator').toString().trim().toLowerCase(), 
-          team: u['team']?.toString() ?? 'None',
-          segment: u['segment']?.toString() ?? 'None',
-        );
-        
-        await fetchAndSyncFromBackend();
-        return true;
+        final Map<String, dynamic> body = json.decode(response.body);
+        if (body['success'] == true && body['user'] != null) {
+          final u = body['user'];
+          currentUser = UserProfile(
+            username: u['username'] ?? '',
+            role: u['role'] ?? 'operator',
+            team: u['team'] ?? 'None',
+            segment: u['segment'] ?? 'None',
+          );
+          
+          // Pull fresh database profiles immediately upon successful authentication
+          await fetchAndSyncFromBackend();
+          return true;
+        }
       }
     } catch (e) {
-      debugPrint("Authentication system network failure: $e");
+      debugPrint("Authentication crash: $e");
     }
     return false;
   }
 
-  Future<bool> toggleShiftPunch(bool isPunchIn) async {
-    if (currentUser == null) return false;
+  /// Manages real-time employee punch triggers
+  Future<void> toggleShiftPunch(bool punchIn) async {
+    if (currentUser == null) return;
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/api/punch'),
         headers: {"Content-Type": "application/json"},
         body: json.encode({
           "username": currentUser!.username,
-          "action": isPunchIn ? "in" : "out"
+          "action": punchIn ? "PUNCH_IN" : "PUNCH_OUT"
         }),
       );
       if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        activePunchInTime = isPunchIn ? DateTime.tryParse(data['time'] ?? '') : null;
+        activePunchInTime = punchIn ? DateTime.now() : null;
         notifyListeners();
-        return true;
       }
     } catch (e) {
-      debugPrint("Punch operation tracking failure: $e");
+      debugPrint("Failed to write attendance trace: $e");
     }
-    return false;
   }
 
-  /// Core shopfloor entry pipeline logging method
-  Future<String?> logHourlyStatus(String batchNo, String side, int qty, String comments) async {
-    if (currentUser == null) return "No active operational user session found.";
-
+  /// Commits operator yield quantities to backend databases securely
+  Future<String?> logHourlyStatus(String batchNo, String layer, int qty, String notes) async {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/api/log_hourly'),
         headers: {"Content-Type": "application/json"},
         body: json.encode({
-          "username": currentUser!.username,
           "batch_no": batchNo,
-          "side": side,
-          "qty": qty,
-          "comments": comments,
-          "team": currentUser!.team,
-          "segment": currentUser!.segment
+          "placement_layer": layer,
+          "qty_processed": qty,
+          "operator_username": currentUser?.username ?? 'system',
+          "comments": notes
         }),
       );
-      
       final data = json.decode(response.body);
       if (response.statusCode == 200 && data['success'] == true) {
-        if (!processingCounters.containsKey(batchNo)) {
-          processingCounters[batchNo] = {"TOP": 0, "BOTTOM": 0};
-        }
-        processingCounters[batchNo]![side] = (processingCounters[batchNo]![side] ?? 0) + qty;
-        
         await fetchAndSyncFromBackend();
         return null;
       } else {
-        return data['message'] ?? "Validation failure on shopfloor log entry.";
+        return data['message'] ?? "Unknown pipeline error.";
       }
     } catch (e) {
-      return "Network connection issue reporting status data.";
+      return "Network communication failure exception.";
     }
   }
 
-  Future<void> closeBatchProcessingBlock(String batchNo) async {
-    final idx = batches.indexWhere((element) => element.batchNo == batchNo);
-    if (idx != -1) {
-      batches[idx].status = 'CLOSED';
-      notifyListeners();
-    }
+  /// Administrative method to gracefully terminate an open pcb lot
+  Future<void> transmitBatchCloseEvent(String batchNo) async {
     try {
       await http.post(
         Uri.parse('$baseUrl/api/close_batch'),
@@ -200,10 +163,11 @@ class EMSStateEngine extends ChangeNotifier {
       );
       await fetchAndSyncFromBackend();
     } catch (e) {
-      debugPrint("Failed to transmit batch state close event: $e");
+      debugPrint("Failed to transmit batch close event: $e");
     }
   }
 
+  /// Inter-Department Routing method
   Future<String?> executeLedgerTransfer(String batchNo, String fromStage, String toStage, int qty, String remarks) async {
     if (currentUser == null) return "Authorization error: Missing active operational token.";
 
@@ -232,6 +196,7 @@ class EMSStateEngine extends ChangeNotifier {
     }
   }
 
+  /// Secondary pipeline wrapper to resolve data pipeline mapping
   Future<String?> injectLedgerTransaction({
     required String batchNo,
     required String fromStage,
@@ -256,7 +221,7 @@ class EMSStateEngine extends ChangeNotifier {
       final data = json.decode(response.body);
       if (response.statusCode == 200 && data['success'] == true) {
         await fetchAndSyncFromBackend();
-        return null; // Return null on complete success
+        return null; 
       } else {
         return data['message'] ?? "Failed to save transaction.";
       }
@@ -264,3 +229,4 @@ class EMSStateEngine extends ChangeNotifier {
       return "Network communication failure: $e";
     }
   }
+}
