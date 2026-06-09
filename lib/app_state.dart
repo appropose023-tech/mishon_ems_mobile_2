@@ -17,7 +17,6 @@ class EMSStateEngine extends ChangeNotifier {
 
   EMSStateEngine();
 
-  /// Synchronizes all operational tables from the Flask database pipeline
   /// Synchronizes all operational tables from the Flask database pipeline safely
   Future<void> fetchAndSyncFromBackend() async {
     isLoading = true;
@@ -97,57 +96,6 @@ class EMSStateEngine extends ChangeNotifier {
     }
   }
 
-        // 2. Sync Ledger entries with strict integer casting
-        final List fetchedLedger = data['ledger'] ?? [];
-        materialLedger = fetchedLedger.map((l) {
-          final rawQty = l['qty_transferred'] ?? 0;
-          return LedgerEntry(
-            batchNo: l['batch_no'] ?? '',
-            fromStage: l['from_stage'] ?? '',
-            toStage: l['to_stage'] ?? '',
-            qtyTransferred: rawQty is num ? rawQty.toInt() : 0,
-            timestamp: DateTime.tryParse(l['entry_timestamp'] ?? '') ?? DateTime.now(),
-            operator: l['operator_username'] ?? '',
-            comments: l['comments'] ?? '',
-          );
-        }).toList();
-
-        // 3. Sync Targeting bounds with strict integer casting
-        final List fetchedTargets = data['targets'] ?? [];
-        targetingMatrix = fetchedTargets.map((t) {
-          final rawQty = t['target_qty'] ?? 0;
-          return FloorTarget(
-            batchNo: t['batch_no'] ?? '',
-            segment: t['segment'] ?? '',
-            team: t['team'] ?? '',
-            targetQty: rawQty is num ? rawQty.toInt() : 0,
-          );
-        }).toList();
-
-        // 4. Safely rebuild performance counts with deterministic integer assignment
-        if (data.containsKey('hourly_logs')) {
-          processingCounters.clear();
-          final List hourlyLogs = data['hourly_logs'] ?? [];
-          for (var log in hourlyLogs) {
-            final bNo = log['batch_no'] ?? '';
-            final side = log['side'] ?? 'TOP';
-            final rawQty = log['qty_done'] ?? 0;
-            final int qty = rawQty is num ? rawQty.toInt() : 0;
-            
-            if (!processingCounters.containsKey(bNo)) {
-              processingCounters[bNo] = {"TOP": 0, "BOTTOM": 0};
-            }
-            processingCounters[bNo]![side] = (processingCounters[bNo]![side] ?? 0) + qty;
-          }
-        }
-      }
-    } catch (e) {
-      debugPrint("Synchronization error pipeline down: $e");
-    }
-    isLoading = false;
-    notifyListeners();
-  }
-
   int getLayerRunningTotal(String batchNo, String side) {
     return processingCounters[batchNo]?[side] ?? 0;
   }
@@ -164,10 +112,10 @@ class EMSStateEngine extends ChangeNotifier {
         final u = data['user'];
         
         currentUser = UserProfile(
-          username: u['username'],
+          username: u['username']?.toString() ?? '',
           role: (u['role'] ?? 'operator').toString().trim().toLowerCase(), 
-          team: u['team'] ?? 'None',
-          segment: u['segment'] ?? 'None',
+          team: u['team']?.toString() ?? 'None',
+          segment: u['segment']?.toString() ?? 'None',
         );
         
         await fetchAndSyncFromBackend();
@@ -223,7 +171,6 @@ class EMSStateEngine extends ChangeNotifier {
       
       final data = json.decode(response.body);
       if (response.statusCode == 200 && data['success'] == true) {
-        // Mutate local state configuration only after confirmed database synchronization
         if (!processingCounters.containsKey(batchNo)) {
           processingCounters[batchNo] = {"TOP": 0, "BOTTOM": 0};
         }
@@ -292,55 +239,3 @@ class EMSStateEngine extends ChangeNotifier {
     required int qty,
     required String operator,
     required String remarks,
-  }) async {
-    return await executeLedgerTransfer(batchNo, fromStage, toStage, qty, remarks);
-  }
-
-  Future<void> dispatchBillingClearance(String batchNo) async {
-    final idx = batches.indexWhere((element) => element.batchNo == batchNo);
-    if (idx != -1) {
-      batches[idx].status = 'DISPATCHED';
-      notifyListeners();
-    }
-    try {
-      await http.post(
-        Uri.parse('$baseUrl/api/dispatch'),
-        headers: {"Content-Type": "application/json"},
-        body: json.encode({"batch_no": batchNo, "status": "DISPATCHED"}),
-      );
-      await fetchAndSyncFromBackend();
-    } catch (e) {
-      debugPrint("Failed to transmit dispatch event: $e");
-    }
-  }
-
-  Future<void> provisionNewTarget(String batchNo, String segment, String team, int targetQty) async {
-    try {
-      await http.post(
-        Uri.parse('$baseUrl/api/provision_target'),
-        headers: {"Content-Type": "application/json"},
-        body: json.encode({
-          "batch_no": batchNo,
-          "segment": segment,
-          "team": team,
-          "target_qty": targetQty
-        }),
-      );
-      await fetchAndSyncFromBackend();
-    } catch (e) {
-      debugPrint("Failed to register target parameter: $e");
-      targetingMatrix.add(FloorTarget(batchNo: batchNo, segment: segment, team: team, targetQty: targetQty));
-      notifyListeners();
-    }
-  }
-
-  void clearSession() {
-    currentUser = null;
-    activePunchInTime = null;
-    batches.clear();
-    materialLedger.clear();
-    targetingMatrix.clear();
-    processingCounters.clear();
-    notifyListeners();
-  }
-}
