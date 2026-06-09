@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import '../app_state.dart';
-import '../models.dart'; // Assumes JobBatch and FloorTarget live here
+import '../models.dart';
 
 class OperationalAnalyticsMatrixView extends StatefulWidget {
   const OperationalAnalyticsMatrixView({Key? key}) : super(key: key);
@@ -10,11 +12,16 @@ class OperationalAnalyticsMatrixView extends StatefulWidget {
   State<OperationalAnalyticsMatrixView> createState() => _OperationalAnalyticsMatrixViewState();
 }
 
+class _ShiftAnalyticsMatrixViewState extends State<OperationalAnalyticsMatrixView> {
+  // Intentional structural renaming to resolve widget reference bounds
+}
+
 class _OperationalAnalyticsMatrixViewState extends State<OperationalAnalyticsMatrixView> {
   final TextEditingController _targetQtyController = TextEditingController();
-  String? _selectedBatchTarget; // Replaced text controller with a state variable
+  String? _selectedBatchTarget;
   String _segmentTarget = "SMT";
   String _teamTarget = "Production";
+  bool _isProcessingTarget = false;
 
   @override
   void dispose() {
@@ -25,152 +32,177 @@ class _OperationalAnalyticsMatrixViewState extends State<OperationalAnalyticsMat
   @override
   Widget build(BuildContext context) {
     final state = Provider.of<EMSStateEngine>(context);
-    
-    // Extract closed batches for dispatch clearance
     final closedBatches = state.batches.where((b) => b.status == 'CLOSED').toList();
-    
-    // Extract open/active batches to populate your new target assignment dropdown
     final activeBatches = state.batches.where((b) => b.status == 'OPEN').toList();
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // ----------------------------------------------------
-          // 1. OUTBOUND DESPATCH APPROVALS
-          // ----------------------------------------------------
-          if (closedBatches.isNotEmpty) ...[
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
+      appBar: AppBar(
+        title: const Text("Analytics & Quality Target Control"),
+        backgroundColor: const Color(0xFF008080),
+        foregroundColor: Colors.white,
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
             const Text(
-              "Outbound Despatch Pending Approvals Request List", 
+              "Closed Batches Awaiting Logistical Dispatch Clearance",
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF004d4d)),
+            ),
+            const SizedBox(height: 8),
+            closedBatches.isEmpty
+                ? const Card(
+                    child: Padding(
+                      padding: EdgeInsets.all(16.0),
+                      child: Text("No batches currently isolated in closed status bounds.", style: TextStyle(color: Colors.grey)),
+                    ),
+                  )
+                : ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: closedBatches.length,
+                    itemBuilder: (context, idx) {
+                      final cb = closedBatches[idx];
+                      return Card(
+                        margin: const EdgeInsets.symmetric(vertical: 4),
+                        child: ListTile(
+                          title: Text("Batch #${cb.batchNo} - ${cb.jobName}"),
+                          subtitle: Text("Client Target: ${cb.clientName} | Qty: ${cb.initialQty}"),
+                          trailing: ElevatedButton(
+                            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF008080)),
+                            onPressed: () async {
+                              // Replaced non-existent dispatchBillingClearance method with accurate state command
+                              await state.transmitBatchCloseEvent(cb.batchNo);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text("Batch clearance status transmission successful."))
+                              );
+                            },
+                            child: const Text("DISPATCH", style: TextStyle(color: Colors.white)),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+            const Divider(height: 32),
+            const Text(
+              "Provision Target Metrics Allocation Map",
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF004d4d)),
             ),
             const SizedBox(height: 12),
-            ...closedBatches.map((cb) => Card(
-              color: Colors.amber[50],
-              child: ListTile(
-                title: Text("Batch: ${cb.batchNo} (${cb.projectName})", style: const TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: const Text("Status: Pending Final Sign-Off to Billing Dispatch Archives."),
-                trailing: IconButton(
-                  icon: const Icon(Icons.check_circle, color: Color(0xFF008080)),
-                  onPressed: () {
-                    state.dispatchBillingClearance(cb.batchNo);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text("Despatch clearance tracking authorized for batch ${cb.batchNo}."))
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: Colors.grey.shade300),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  isExpanded: true,
+                  hint: const Text("Select active operational batch sequence..."),
+                  value: _selectedBatchTarget,
+                  items: activeBatches.map((b) {
+                    return DropdownMenuItem<String>(
+                      value: b.batchNo,
+                      child: Text("Batch #${b.batchNo} - ${b.jobName}"),
                     );
-                  },
+                  }).toList(),
+                  onChanged: (val) => setState(() => _selectedBatchTarget = val),
                 ),
               ),
-            )).toList(),
-            const Divider(height: 32),
-          ],
-
-          // ----------------------------------------------------
-          // 2. INJECT FLOOR TARGETS (CONFIGURED WITH DROPDOWNS)
-          // ----------------------------------------------------
-          const Text(
-            "Inject Floor Target Routing Baseline Configurations", 
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF004d4d)),
-          ),
-          const SizedBox(height: 12),
-          
-          // Dynamic Database-Driven Batch Dropdown Selector
-          DropdownButtonFormField<String>(
-            value: _selectedBatchTarget,
-            decoration: const InputDecoration(
-              labelText: "Select Active Target Batch",
-              border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.layers, color: Color(0xFF008080)),
             ),
-            hint: const Text("Choose a running floor batch sequence..."),
-            items: activeBatches.map((JobBatch batch) {
-              return DropdownMenuItem<String>(
-                value: batch.batchNo,
-                child: Text("${batch.batchNo} [${batch.projectName}]"),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              value: _segmentTarget,
+              decoration: const InputDecoration(labelText: "Shop Floor Segment Node", filled: true, fillColor: Colors.white),
+              items: ["SMT", "Through hole", "None"].map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
+              onChanged: (v) => setState(() => _segmentTarget = v!),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              value: _teamTarget,
+              decoration: const InputDecoration(labelText: "Operational Sub-Team Assignment", filled: true, fillColor: Colors.white),
+              items: ["Production", "Quality", "None"].map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
+              onChanged: (v) => setState(() => _teamTarget = v!),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _targetQtyController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: "Target Yield Upper Bound Threshold Volume",
+                border: OutlineInputBorder(),
+                filled: true,
+                fillColor: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 16),
+            _isProcessingTarget
+                ? const Center(child: CircularProgressIndicator(color: Color(0xFF008080)))
+                : ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF004d4d),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    onPressed: () async {
+                      int tq = int.tryParse(_targetQtyController.text) ?? 0;
+                      if (_selectedBatchTarget != null && tq > 0) {
+                        setState(() => _isProcessingTarget = true);
+                        try {
+                          // Standardize parameter targeting directly against api.py provision route
+                          final res = await http.post(
+                            Uri.parse('${state.baseUrl}/api/provision_target'),
+                            headers: {"Content-Type": "application/json"},
+                            body: json.encode({
+                              "batch_no": _selectedBatchTarget,
+                              "segment": _segmentTarget,
+                              "team": _teamTarget,
+                              "target_qty": tq
+                            }),
+                          );
+                          if (res.statusCode == 200) {
+                            await state.fetchAndSyncFromBackend();
+                            _targetQtyController.clear();
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text("Target profiles registered safely inside operational parameters."), backgroundColor: Colors.green)
+                            );
+                          } else {
+                            throw Exception("Server rejection exception parameter.");
+                          }
+                        } catch (e) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text("Failed to save target entry bounds securely."), backgroundColor: Colors.red)
+                          );
+                        } finally {
+                          setState(() => _isProcessingTarget = false);
+                        }
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text("Please select a valid batch identifier and non-zero target volume."))
+                        );
+                      }
+                    },
+                    child: const Text("REGISTER TARGET PARAMETER", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  ),
+            const Divider(height: 32),
+            const Text(
+              "Comparative Yield Performance Reports vs Target Bounds", 
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF004d4d)),
+            ),
+            const SizedBox(height: 12),
+            ...state.targetingMatrix.map((tm) {
+              return Card(
+                child: ListTile(
+                  leading: const Icon(Icons.trending_up, color: Color(0xFF004d4d)),
+                  title: Text("Batch: ${tm.batchNo} [${tm.segment} - ${tm.team}]"),
+                  subtitle: Text("Target Capacity Bounds: ${tm.targetQty} Units"),
+                ),
               );
             }).toList(),
-            onChanged: (value) {
-              setState(() {
-                _selectedBatchTarget = value;
-              });
-            },
-          ),
-          const SizedBox(height: 12),
-          
-          Row(
-            children: [
-              Expanded(
-                child: DropdownButtonFormField<String>(
-                  value: _segmentTarget,
-                  decoration: const InputDecoration(labelText: "Line Segment", border: OutlineInputBorder()),
-                  items: ["SMT", "Through hole"].map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
-                  onChanged: (v) => setState(() => _segmentTarget = v!),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: DropdownButtonFormField<String>(
-                  value: _teamTarget,
-                  decoration: const InputDecoration(labelText: "Floor Domain", border: OutlineInputBorder()),
-                  items: ["Production", "Quality"].map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
-                  onChanged: (v) => setState(() => _teamTarget = v!),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          
-          TextFormField(
-            controller: _targetQtyController, 
-            keyboardType: TextInputType.number, 
-            decoration: const InputDecoration(labelText: "Target Volume Capacity Metrics", border: OutlineInputBorder()),
-          ),
-          const SizedBox(height: 12),
-          
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF008080)),
-            onPressed: () {
-              int tq = int.tryParse(_targetQtyController.text) ?? 0;
-              if (_selectedBatchTarget != null && _selectedBatchTarget!.isNotEmpty && tq > 0) {
-                state.provisionNewTarget(_selectedBatchTarget!, _segmentTarget, _teamTarget, tq);
-                
-                _targetQtyController.clear();
-                setState(() {
-                  _selectedBatchTarget = null; // Clear selection after submission
-                });
-                
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("Target profiles registered safely inside operational parameters."))
-                );
-              } else {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("Please select a valid batch identifier and non-zero target volume."))
-                );
-              }
-            },
-            child: const Text("REGISTER TARGET PARAMETER", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-          ),
-          const Divider(height: 32),
-
-          // ----------------------------------------------------
-          // 3. COMPARATIVE YIELD PERFORMANCE REPORTS
-          // ----------------------------------------------------
-          const Text(
-            "Comparative Yield Performance Reports vs Target Bounds", 
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF004d4d)),
-          ),
-          const SizedBox(height: 12),
-          
-          ...state.targetingMatrix.map((tm) {
-            return Card(
-              child: ListTile(
-                leading: const Icon(Icons.trending_up, color: Color(0xFF004d4d)),
-                title: Text("Batch: ${tm.batchNo} [${tm.segment} - ${tm.team}]"),
-                subtitle: Text("Target Capacity Bounds: ${tm.targetQty} Units"),
-              ),
-            );
-          }).toList(),
-        ],
+          ],
+        ),
       ),
     );
   }
