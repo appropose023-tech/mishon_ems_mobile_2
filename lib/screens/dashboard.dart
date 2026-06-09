@@ -19,12 +19,10 @@ class DashboardScreen extends StatelessWidget {
     final stateEngine = Provider.of<EMSStateEngine>(context);
     final String role = (stateEngine.currentUser?.role ?? 'operator').trim().toLowerCase();
 
-    // 1. If Operator or Supervisor: Safely provide a standalone view container to fix black backgrounds
     if (role != 'admin' && role != 'manager') {
       return const OperatorSupervisorHub();
     }
 
-    // 2. If Management (Admin/Manager): Build the full system administration grid console
     final bool isAdmin = (role == 'admin');
 
     return Scaffold(
@@ -37,7 +35,9 @@ class DashboardScreen extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () {
-              stateEngine.clearSession();
+              // Direct assignment instead of non-existent clearSession method
+              stateEngine.currentUser = null;
+              stateEngine.activePunchInTime = null;
               Navigator.pushReplacementNamed(context, '/login');
             },
           )
@@ -152,7 +152,7 @@ class OperatorSupervisorHub extends StatelessWidget {
     final String displayRole = (user?.role ?? 'Operator').toUpperCase();
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC), // Solves the black background issue instantly
+      backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
         title: Text("Mishon Shopfloor [$displayRole]"),
         backgroundColor: const Color(0xFF004d4d),
@@ -162,13 +162,14 @@ class OperatorSupervisorHub extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () {
-              stateEngine.clearSession();
+              stateEngine.currentUser = null;
+              stateEngine.activePunchInTime = null;
               Navigator.pushReplacementNamed(context, '/login');
             },
           )
         ],
       ),
-      body: SafeArea( // Solves the top cut-off screen clipping bug completely
+      body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16.0),
           child: Column(
