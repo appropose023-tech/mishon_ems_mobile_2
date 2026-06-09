@@ -1,38 +1,44 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../app_state.dart';
 
 class KitSynchronizerScreen extends StatelessWidget {
-  const KitSynchronizerScreen({super.key}); // Constructor matches class name now
+  const KitSynchronizerScreen({super.key});
   
-// 🚀 WHAT TO PASTE INSTEAD:
-@override
-Widget build(BuildContext context) {
-  final state = Provider.of<EMSStateEngine>(context);
+  @override
+  Widget build(BuildContext context) {
+    final state = Provider.of<EMSStateEngine>(context);
 
-  return Scaffold(
-    appBar: AppBar(
-      title: const Text("Kit Synchronizer"), // Change this title text for each file
-      leading: IconButton(
-        icon: const Icon(Icons.arrow_back),
-        onPressed: () {
-          Navigator.of(context).pop(); // Fixes the back button instantly
-        },
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
+      appBar: AppBar(
+        title: const Text("Kit Synchronizer Matrix"),
+        backgroundColor: const Color(0xFF008080),
+        foregroundColor: Colors.white,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () {
+            Navigator.of(context).pop();
+          },
+        ),
       ),
-    ),
-    body: state.isLoading
-        ? const Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                CircularProgressIndicator(),
-                SizedBox(height: 16),
-                Text("Kit Synchronizer feature is synchronizing ......"), // Change text for each file
-              ],
+      body: state.isLoading
+          ? const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(color: Color(0xFF008080)),
+                  SizedBox(height: 16),
+                  Text("Synchronizing floor kit deployment configurations..."),
+                ],
+              ),
+            )
+          : const Center(
+              child: Text(
+                "Kit Synchronization Pipeline Operational.",
+                style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF004d4d)),
+              ),
             ),
-          )
-        : const Center(
-            child: Text("Kit Synchronizer UI Content Goes Here"), 
-            // ^^^ Replace this placeholder line with your actual layout code for this screen (e.g., SingleChildScrollView, Columns, etc.)
-          ),
-  );
-}
+    );
+  }
 }
