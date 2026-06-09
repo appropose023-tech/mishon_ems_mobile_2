@@ -12,10 +12,6 @@ class OperationalAnalyticsMatrixView extends StatefulWidget {
   State<OperationalAnalyticsMatrixView> createState() => _OperationalAnalyticsMatrixViewState();
 }
 
-class _ShiftAnalyticsMatrixViewState extends State<OperationalAnalyticsMatrixView> {
-  // Intentional structural renaming to resolve widget reference bounds
-}
-
 class _OperationalAnalyticsMatrixViewState extends State<OperationalAnalyticsMatrixView> {
   final TextEditingController _targetQtyController = TextEditingController();
   String? _selectedBatchTarget;
@@ -73,8 +69,8 @@ class _OperationalAnalyticsMatrixViewState extends State<OperationalAnalyticsMat
                           trailing: ElevatedButton(
                             style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF008080)),
                             onPressed: () async {
-                              // Replaced non-existent dispatchBillingClearance method with accurate state command
-                              await state.transmitBatchCloseEvent(cb.batchNo);
+                              // Corrected to match your exact app_state.dart method name: transmitBatchStateCloseEvent
+                              await state.transmitBatchStateCloseEvent(cb.batchNo);
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(content: Text("Batch clearance status transmission successful."))
                               );
@@ -151,7 +147,6 @@ class _OperationalAnalyticsMatrixViewState extends State<OperationalAnalyticsMat
                       if (_selectedBatchTarget != null && tq > 0) {
                         setState(() => _isProcessingTarget = true);
                         try {
-                          // Standardize parameter targeting directly against api.py provision route
                           final res = await http.post(
                             Uri.parse('${state.baseUrl}/api/provision_target'),
                             headers: {"Content-Type": "application/json"},
