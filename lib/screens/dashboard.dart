@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import '../app_state.dart';
+import '../models.dart';
 
 import 'profile_provisioning.dart';
 import 'kit_synchronizer.dart';
@@ -11,6 +14,10 @@ import 'analytics.dart';
 import 'execution_floor.dart';
 import 'shift_clock.dart';
 
+// ============================================================================
+// MODULE 1: DASHBOARD ENTRYPOINT WITH ROLE-BASED ACCESS CONTROL MATRIX
+// ============================================================================
+
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
 
@@ -19,6 +26,7 @@ class DashboardScreen extends StatelessWidget {
     final stateEngine = Provider.of<EMSStateEngine>(context);
     final String role = (stateEngine.currentUser?.role ?? 'operator').trim().toLowerCase();
 
+    // Check privileges: Route operators and supervisors to the simplified shopfloor layout
     if (role != 'admin' && role != 'manager') {
       return const OperatorSupervisorHub();
     }
@@ -35,7 +43,7 @@ class DashboardScreen extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () {
-              // Direct assignment instead of non-existent clearSession method
+              // Direct state mutations to flush operational tokens safely
               stateEngine.currentUser = null;
               stateEngine.activePunchInTime = null;
               Navigator.pushReplacementNamed(context, '/login');
@@ -141,6 +149,10 @@ class DashboardScreen extends StatelessWidget {
     );
   }
 }
+
+// ============================================================================
+// MODULE 2: RE-ARCHITECTED SUB-DASHBOARD FOR OPERATORS & SUPERVISORS
+// ============================================================================
 
 class OperatorSupervisorHub extends StatelessWidget {
   const OperatorSupervisorHub({super.key});
@@ -248,3 +260,115 @@ class OperatorSupervisorHub extends StatelessWidget {
     );
   }
 }
+
+// ============================================================================
+// MODULE 3: PRODUCTION ANALYTICS PORTS & YIELD DEFECT MONITOR
+// ============================================================================
+
+class OperationalAnalyticsMatrixView extends StatefulWidget {
+  const OperationalAnalyticsMatrixView({Key? key}) : super(key: key);
+
+  @override
+  State<OperationalAnalyticsMatrixView> createState() => _OperationalAnalyticsMatrixViewState();
+}
+
+class _OperationalAnalyticsMatrixViewState extends State<OperationalAnalyticsMatrixView> {
+  final TextEditingController _targetQtyController = TextEditingController();
+  String? _selectedBatchTarget;
+  String _segmentTarget = "SMT";
+  String _teamTarget = "Production";
+  bool _isProcessingTarget = false;
+
+  @override
+  void dispose() {
+    _targetQtyController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = Provider.of<EMSStateEngine>(context);
+    final String currentRole = (state.currentUser?.role ?? 'operator').trim().toLowerCase();
+    final bool isManagement = (currentRole == 'admin' || currentRole == 'manager');
+
+    // Only allow open batches to receive new targets inside management module
+    final activeBatches = state.batches.where((b) => b.status == 'OPEN').toList();
+
+    // Visibility Scoping: Workers see targeted items matching their node assignment; Management sweeps all.
+    final displayTargets = state.targetingMatrix.where((t) {
+      if (isManagement) return true;
+      return t.team == state.currentUser?.team && t.segment == state.currentUser?.segment;
+    }).toList();
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
+      appBar: AppBar(
+        title: const Text("Analytics & Quality Target Control"),
+        backgroundColor: const Color(0xFF008080),
+        foregroundColor: Colors.white,
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // MANAGEMENT TARGET ASSIGNMENT MODULE
+            if (isManagement) ...[
+              const Text(
+                "Establish New Shop Floor Target Constraint",
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF004d4d)),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                value: _selectedBatchTarget,
+                hint: const Text("Select active sequence batch..."),
+                decoration: const InputDecoration(border: OutlineInputBorder(), filled: true, fillColor: Colors.white),
+                items: activeBatches.map((b) {
+                  return DropdownMenuItem(value: b.batchNo, child: Text("Batch #${b.batchNo} - ${b.jobName}"));
+                }).toList(),
+                onChanged: (v) => setState(() => _selectedBatchTarget = v),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      value: _segmentTarget,
+                      decoration: const InputDecoration(labelText: "Floor Segment Node", border: OutlineInputBorder()),
+                      items: ["SMT", "Through hole", "None"].map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
+                      onChanged: (v) => setState(() => _segmentTarget = v!),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      value: _teamTarget,
+                      decoration: const InputDecoration(labelText: "Operational Sub-Team", border: OutlineInputBorder()),
+                      items: ["Production", "Quality", "None"].map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
+                      onChanged: (v) => setState(() => _teamTarget = v!),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _targetQtyController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: "Target Quantity Threshold Bound", border: OutlineInputBorder(), filled: true, fillColor: Colors.white),
+              ),
+              const SizedBox(height: 16),
+              _isProcessingTarget
+                  ? const Center(child: CircularProgressIndicator(color: Color(0xFF008080)))
+                  : ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF008080),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      onPressed: () async {
+                        int q = int.tryParse(_targetQtyController.text) ?? 0;
+                        if (_selectedBatchTarget != null && q > 0) {
+                          setState(() => _isProcessingTarget = true);
+                          try {
+                            final res = await http.post(
+                              Uri.parse('${state.baseUrl}/api/provision_target'),
+                              headers: {"Content-Type":
