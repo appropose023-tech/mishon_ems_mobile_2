@@ -18,6 +18,17 @@ class EMSStateEngine extends ChangeNotifier {
 
   EMSStateEngine();
 
+  /// Safely extracts the cumulative processed quantity for a specific batch and layer side
+  int getLayerRunningTotal(String batchNo, String layer) {
+    if (processingCounters.containsKey(batchNo)) {
+      final layerMap = processingCounters[batchNo];
+      if (layerMap != null && layerMap.containsKey(layer)) {
+        return layerMap[layer] ?? 0;
+      }
+    }
+    return 0;
+  }
+
   /// Synchronizes all operational tables from the Flask database pipeline safely
   Future<void> fetchAndSyncFromBackend() async {
     isLoading = true;
