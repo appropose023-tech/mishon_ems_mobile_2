@@ -31,10 +31,26 @@ class _InterDepartmentLedgerGatewayViewState extends State<InterDepartmentLedger
     final state = Provider.of<EMSStateEngine>(context);
     
     final String role = (state.currentUser?.role ?? 'operator').trim().toLowerCase();
+    final String userTeam = state.currentUser?.team ?? 'None';
+    final String userSegment = state.currentUser?.segment ?? 'None';
     final bool isManagement = (role == 'admin' || role == 'manager');
 
-    // Filter rules: Operators only interact with active open components
+    // FIX ISSUE #2: Filter active open batches so floor operators only see their assigned target segments/teams
     List<JobBatch> visibleFormBatches = state.batches.where((b) => b.status == 'OPEN').toList();
+    if (!isManagement) {
+      visibleFormBatches = visibleFormBatches.where((b) => 
+        state.targetingMatrix.any((target) => 
+          target.batchNo == b.batchNo && 
+          target.segment == userSegment && 
+          target.team == userTeam
+        )
+      ).toList();
+    }
+
+    // Dynamic safety fallback if a previously selected batch falls out of scope following a sync loop
+    if (_batchNo != null && !visibleFormBatches.any((b) => b.batchNo == _batchNo)) {
+      _batchNo = null;
+    }
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
@@ -48,7 +64,7 @@ class _InterDepartmentLedgerGatewayViewState extends State<InterDepartmentLedger
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // 3) ADMINISTRATIVE GLOBAL QUANTITY SPLIT-STATUS REPORT MATRIX
+            // ADMINISTRATIVE GLOBAL QUANTITY SPLIT-STATUS REPORT MATRIX
             if (isManagement) ...[
               const Text(
                 "📊 Management System Matrix Split View (Current Status)", 
@@ -109,23 +125,39 @@ class _InterDepartmentLedgerGatewayViewState extends State<InterDepartmentLedger
               const Divider(height: 32, thickness: 1.5),
             ],
 
-            // CORE MATERIAL ENTRY TRANSFER FORM (PRESERVED FUNCTIONALITY)
+            // CORE MATERIAL ENTRY TRANSFER FORM
             const Text(
               "Route Batch Tracking Location Tokens", 
               style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF004d4d))
             ),
             const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              value: _batchNo,
-              hint: const Text("Select active line lot segment..."),
-              decoration: const InputDecoration(border: OutlineInputBorder(), filled: true, fillColor: Colors.white),
-              items: visibleFormBatches.map((b) {
-                return DropdownMenuItem(
-                  value: b.batchNo, 
-                  child: Text("Batch #${b.batchNo} (${b.jobName}) — Avail: ${b.initialQty}")
-                );
-              }).toList(),
-              onChanged: (v) => setState(() => _batchNo = v),
+
+            // FIX ISSUE #1: Dropdown layout wrapped in expanding constraint container with layout boundary truncation
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: Colors.grey.shade400),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  isExpanded: true, // Forces layout constraints inside expanding flex environments
+                  value: _batchNo,
+                  hint: const Text("Select active line lot segment..."),
+                  onChanged: (v) => setState(() => _batchNo = v),
+                  items: visibleFormBatches.map((b) {
+                    return DropdownMenuItem<String>(
+                      value: b.batchNo, 
+                      child: Text(
+                        "Batch #${b.batchNo} (${b.jobName}) — Avail: ${b.initialQty}",
+                        overflow: TextOverflow.ellipsis, // Halts horizontal axis screen overflowing
+                        maxLines: 1,
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
             ),
             const SizedBox(height: 12),
             Row(
