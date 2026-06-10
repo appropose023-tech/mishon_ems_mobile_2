@@ -31,7 +31,7 @@ class _OperationalAnalyticsMatrixViewState extends State<OperationalAnalyticsMat
     final String currentRole = (state.currentUser?.role ?? 'operator').trim().toLowerCase();
     final bool isManagement = (currentRole == 'admin' || currentRole == 'manager');
 
-    // Only allow open batches to receive new targets
+    // Only allow open batches to receive new targets inside management module
     final activeBatches = state.batches.where((b) => b.status == 'OPEN').toList();
 
     // Target Filtering Rule: Workers see targets matching their segment/team; Management sees all.
@@ -214,7 +214,7 @@ class _OperationalAnalyticsMatrixViewState extends State<OperationalAnalyticsMat
 
             const Divider(height: 40, thickness: 1.5),
 
-            // 1) PRODUCTION & QC HOURLY LOGS TERMINAL HUB VIEW
+            // 2) PRODUCTION & QC HOURLY LOGS TERMINAL HUB VIEW
             const Text(
               "Live Production & QC Hourly Status Stream Logs",
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF004d4d)),
