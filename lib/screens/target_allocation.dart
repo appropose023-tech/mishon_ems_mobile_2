@@ -28,6 +28,8 @@ class _TargetAllocationScreenState extends State<TargetAllocationScreen> {
   @override
   Widget build(BuildContext context) {
     final state = Provider.of<EMSStateEngine>(context);
+    
+    // GOVERNANCE RULE: Hides closed jobs entirely from target assignments
     final activeBatches = state.batches.where((b) => b.status == 'OPEN').toList();
 
     return Scaffold(
@@ -92,7 +94,7 @@ class _TargetAllocationScreenState extends State<TargetAllocationScreen> {
                               onPressed: () async {
                                 int q = int.tryParse(_qtyController.text) ?? 0;
                                 if (_selectedBatch == null || q <= 0) {
-                                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Error: Select a batch and non-zero volume.")));
+                                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Error: Select an active open batch and non-zero volume.")));
                                   return;
                                 }
                                 setState(() => _isSaving = true);
@@ -113,7 +115,7 @@ class _TargetAllocationScreenState extends State<TargetAllocationScreen> {
                                     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Target profile saved to live floor guidelines."), backgroundColor: Colors.green));
                                   }
                                 } catch (e) {
-                                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Network submission panic error.")));
+                                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Network submission error context failure.")));
                                 } finally {
                                   setState(() => _isSaving = false);
                                 }
