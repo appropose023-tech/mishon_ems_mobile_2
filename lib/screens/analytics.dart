@@ -31,8 +31,10 @@ class _OperationalAnalyticsMatrixViewState extends State<OperationalAnalyticsMat
     final String currentRole = (state.currentUser?.role ?? 'operator').trim().toLowerCase();
     final bool isManagement = (currentRole == 'admin' || currentRole == 'manager');
 
+    // Only allow open batches to receive new targets inside management module
     final activeBatches = state.batches.where((b) => b.status == 'OPEN').toList();
 
+    // Target Filtering Rule: Workers see targets matching their segment/team; Management sees all.
     final displayTargets = state.targetingMatrix.where((t) {
       if (isManagement) return true;
       return t.team == state.currentUser?.team && t.segment == state.currentUser?.segment;
@@ -95,164 +97,172 @@ class _OperationalAnalyticsMatrixViewState extends State<OperationalAnalyticsMat
                 decoration: const InputDecoration(labelText: "Target Quantity Threshold Bound", border: OutlineInputBorder(), filled: true, fillColor: Colors.white),
               ),
               const SizedBox(height: 16),
-              _isProcessingTarget 
-                ? const Center(child: CircularProgressIndicator(color: Color(0xFF008080))) 
-                : ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF008080),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                    ),
-                    onPressed: () async {
-                      int q = int.tryParse(_targetQtyController.text) ?? 0;
-                      if (_selectedBatchTarget != null && q > 0) {
-                        setState(() => _isProcessingTarget = true);
-                        try {
-                          final res = await http.post(
-                            Uri.parse('${state.baseUrl}/api/provision_target'),
-                            headers: {"Content-Type": "application/json"},
-                            body: json.encode({
-                              "batch_no": _selectedBatchTarget,
-                              "segment": _segmentTarget,
-                              "team": _teamTarget,
-                              "target_qty": q
-                            }),
-                          );
-                          if (res.statusCode == 200) {
-                            await state.fetchAndSyncFromBackend();
-                            _targetQtyController.clear();
+              _isProcessingTarget
+                  ? const Center(child: CircularProgressIndicator(color: Color(0xFF008080)))
+                  : ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF008080),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      onPressed: () async {
+                        int q = int.tryParse(_targetQtyController.text) ?? 0;
+                        if (_selectedBatchTarget != null && q > 0) {
+                          setState(() => _isProcessingTarget = true);
+                          try {
+                            final res = await http.post(
+                              Uri.parse('${state.baseUrl}/api/provision_target'),
+                              headers: {"Content-Type": "application/json"},
+                              body: json.encode({
+                                "batch_no": _selectedBatchTarget,
+                                "segment": _segmentTarget,
+                                "team": _teamTarget,
+                                "target_qty": q
+                              }),
+                            );
+                            if (res.statusCode == 200) {
+                              await state.fetchAndSyncFromBackend();
+                              _targetQtyController.clear();
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text("Target profile committed safely."), backgroundColor: Colors.green)
+                                );
+                              }
+                            }
+                          } catch (e) {
                             if (mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text("Target profile committed safely."), backgroundColor: Colors.green)
+                                  const SnackBar(content: Text("Failed to save target entry bounds securely."), backgroundColor: Colors.red)
                               );
                             }
+                          } finally {
+                            if (mounted) {
+                              setState(() => _isProcessingTarget = false);
+                            }
                           }
-                        } catch (e) {
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text("Network failure: $e"), backgroundColor: Colors.red)
-                            );
-                          }
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text("Please select a valid batch identifier and non-zero target volume."), backgroundColor: Colors.orange)
+                          );
                         }
-                        setState(() => _isProcessingTarget = false);
-                      }
-                    },
-                    child: const Text("INJECT FACTORY FLOOR TARGET", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                  ),
-              const Divider(height: 32, thickness: 1.5),
+                      },
+                      child: const Text("REGISTER TARGET PARAMETER", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    ),
+              const Divider(height: 40, thickness: 1.5),
             ],
 
-            // LIVE MONITORING: WORKER SHIFT ATTENDANCE VERIFICATION LOGS
+            // 1) PERFORMANCE MONITORING (TARGET VS LIVE YIELD WITH WARNING ALERTS)
             const Text(
-              "⏱️ Worker Shift Attendance Verification Logs",
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF004d4d)),
+              "Comparative Yield Performance vs Target Bounds", 
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF004d4d)),
             ),
-            const SizedBox(height: 8),
-            state.rawHourlyLogs.where((l) => l['action_type'] == 'PUNCH_IN' || l['action_type'] == 'PUNCH_OUT').isEmpty
-              ? const Card(child: Padding(padding: EdgeInsets.all(16.0), child: Text("No attendance verification timestamps recorded on the floor yet.", style: TextStyle(color: Colors.grey, fontSize: 13))))
-              : ListView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: state.rawHourlyLogs.length,
-                  itemBuilder: (context, index) {
-                    // Read items in reverse order to keep latest logs at the top
-                    final item = state.rawHourlyLogs[state.rawHourlyLogs.length - 1 - index];
-                    if (item['action_type'] == 'PUNCH_IN' || item['action_type'] == 'PUNCH_OUT') {
-                      bool isPunchIn = item['action_type'] == 'PUNCH_IN';
-                      return Card(
-                        color: isPunchIn ? const Color(0xFFF0FDF4) : const Color(0xFFFEF2F2),
-                        margin: const EdgeInsets.symmetric(vertical: 4),
-                        // ... inside lib/screens/analytics.dart
-                        ListTile(
-                          leading: Icon(isPunchIn ? Icons.login : Icons.logout, color: isPunchIn ? Colors.green : Colors.red),
-                          title: Text("Operator: ${item['operator_username']} — ${item['action_type']}", style: const TextStyle(fontWeight: FontWeight.bold)),
-                          subtitle: Text("Timestamp Structural Stamp: ${item['log_timestamp']}"),
-                        )
-                      );
-                    }
-                    return const SizedBox.shrink();
-                  },
-                ),
-            const SizedBox(height: 24),
-
-            // CURRENT TARGET TRACKING VISUALIZATION MATRIX
-            const Text("Active Floor Allocation Targets Matrix", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF004d4d))),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             displayTargets.isEmpty
-                ? const Text("No active tracking metrics inside selected cluster parameters.", style: TextStyle(color: Colors.grey, fontSize: 13))
-                : GridView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, childAspectRatio: 1.4, crossAxisSpacing: 8, mainAxisSpacing: 8),
-                    itemCount: displayTargets.length,
-                    itemBuilder: (context, idx) {
-                      final target = displayTargets[idx];
+                ? const Card(child: Padding(padding: EdgeInsets.all(16.0), child: Text("No tracking targets registered within your visibility layer.", style: TextStyle(color: Colors.grey))))
+                : Column(
+                    children: displayTargets.map((tm) {
+                      int totalCompleted = 0;
+                      if (state.processingCounters.containsKey(tm.batchNo)) {
+                        final internalSideMap = state.processingCounters[tm.batchNo];
+                        totalCompleted += (internalSideMap?['TOP'] ?? 0) + (internalSideMap?['BOTTOM'] ?? 0);
+                      }
+
+                      bool isBelowTarget = totalCompleted < tm.targetQty;
+
                       return Card(
-                        color: Colors.white,
-                        elevation: 1,
+                        margin: const EdgeInsets.symmetric(vertical: 6),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: isBelowTarget ? Colors.amber.shade300 : Colors.green.shade300, width: 1)),
                         child: Padding(
-                          padding: const EdgeInsets.all(8.0),
+                          padding: const EdgeInsets.all(14.0),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Text("Batch #${target.batchNo}", style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF008080))),
-                              Text("Node: ${target.segment}", style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
-                              Text("Team: ${target.team}", style: const TextStyle(fontSize: 12)),
-                              const SizedBox(height: 4),
-                              Text("Bound: ${target.targetQty} Pcs", style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.redAccent)),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text("Batch Reference: #${tm.batchNo}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: isBelowTarget ? Colors.amber.shade100 : Colors.green.shade100,
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      isBelowTarget ? "LOW YIELD ALERT" : "TARGET SATISFIED",
+                                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: isBelowTarget ? Colors.amber.shade900 : Colors.green.shade900),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              Text("Target Context Scope: ${tm.segment} — ${tm.team}", style: TextStyle(color: Colors.grey.shade700, fontSize: 13)),
+                              const Divider(height: 16),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text("Current Output: $totalCompleted Units", style: TextStyle(fontWeight: FontWeight.w600, color: isBelowTarget ? Colors.red.shade700 : Colors.green.shade700)),
+                                  Text("Target Bound: ${tm.targetQty} Units", style: const TextStyle(fontWeight: FontWeight.w600)),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              LinearProgressIndicator(
+                                value: tm.targetQty > 0 ? (totalCompleted / tm.targetQty).clamp(0.0, 1.0) : 0.0,
+                                color: isBelowTarget ? Colors.amber.shade700 : Colors.green,
+                                backgroundColor: Colors.grey.shade200,
+                                minHeight: 6,
+                              )
                             ],
                           ),
                         ),
                       );
-                    },
+                    }).toList(),
                   ),
 
-            const Divider(height: 32, thickness: 1.5),
-            const Text("📋 Historical Process Output Metric Pipeline", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF004d4d))),
-            const SizedBox(height: 12),
+            const Divider(height: 40, thickness: 1.5),
 
-            state.rawHourlyLogs.where((l) => l['action_type'] != 'PUNCH_IN' && l['action_type'] != 'PUNCH_OUT').isEmpty
-                ? const Center(child: Padding(padding: EdgeInsets.all(24.0), child: Text("No transaction batches emitted across shop floor layers yet.", style: TextStyle(color: Colors.grey))))
+            // 2) PRODUCTION & QC HOURLY LOGS TERMINAL HUB VIEW
+            const Text(
+              "Live Production & QC Hourly Status Stream Logs",
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF004d4d)),
+            ),
+            const SizedBox(height: 12),
+            state.rawHourlyLogs.isEmpty
+                ? const Card(child: Padding(padding: EdgeInsets.all(16.0), child: Text("No live hourly records emitted from assembly lines yet.", style: TextStyle(color: Colors.grey))))
                 : ListView.builder(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
                     itemCount: state.rawHourlyLogs.length,
                     itemBuilder: (context, index) {
                       final log = state.rawHourlyLogs[state.rawHourlyLogs.length - 1 - index];
-                      if (log['action_type'] == 'PUNCH_IN' || log['action_type'] == 'PUNCH_OUT') return const SizedBox.shrink();
                       
-                      String logBatch = log['batch_no']?.toString() ?? '';
+                      String logBatch = log['batch_no']?.toString() ?? 'N/A';
                       String operator = log['operator_username']?.toString() ?? 'Unknown';
-                      String side = log['side']?.toString() ?? 'TOP';
-                      String qty = log['qty_done']?.toString() ?? '0';
+                      String side = (log['placement_layer']?.toString() ?? log['side']?.toString() ?? 'TOP').toUpperCase();
+                      String qty = (log['qty_processed']?.toString() ?? log['qty_done']?.toString() ?? '0');
                       String comment = log['comments']?.toString() ?? '';
                       String timestamp = log['log_timestamp']?.toString() ?? '';
 
-                      Map<String, dynamic> defsMap = {};
-                      if (log['defects'] != null) {
-                        if (log['defects'] is Map) {
-                          defsMap = Map<String, dynamic>.from(log['defects']);
-                        } else if (log['defects'] is String) {
-                          try { defsMap = json.decode(log['defects']); } catch (_) {}
-                        }
+                      List<String> activeDefects = [];
+                      if (log['defects'] != null && log['defects'] is Map) {
+                        final Map defectMap = log['defects'];
+                        defectMap.forEach((key, value) {
+                          if (value == true || value.toString().toLowerCase() == 'true') {
+                            activeDefects.add(key.toString());
+                          }
+                        });
                       }
 
-                      List<String> activeDefectsFormatted = [];
-                      defsMap.forEach((key, val) {
-                        if (val is num && val > 0) {
-                          activeDefectsFormatted.add("$key ($val%)");
-                        } else if (val == true || val == "true") {
-                          activeDefectsFormatted.add(key);
-                        }
-                      });
-
-                      bool explicitlyHasIssues = activeDefectsFormatted.isNotEmpty;
+                      bool explicitlyHasIssues = activeDefects.isNotEmpty || 
+                                                 comment.toLowerCase().contains('error') || 
+                                                 comment.toLowerCase().contains('defect') || 
+                                                 comment.toLowerCase().contains('halt');
 
                       return Card(
                         margin: const EdgeInsets.symmetric(vertical: 6),
-                        color: explicitlyHasIssues ? const Color(0xFFFFF1F2) : Colors.white,
-                        elevation: 0.5,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        color: explicitlyHasIssues ? const Color(0xFFFFF5F5) : Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          side: BorderSide(color: explicitlyHasIssues ? Colors.red.shade300 : Colors.grey.shade200, width: explicitlyHasIssues ? 1.5 : 1),
+                        ),
                         child: Padding(
                           padding: const EdgeInsets.all(12.0),
                           child: Column(
@@ -261,22 +271,23 @@ class _OperationalAnalyticsMatrixViewState extends State<OperationalAnalyticsMat
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
-                                  Text("Batch #$logBatch ➔ $qty Pcs", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                                  Chip(
-                                    label: Text(side, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
-                                    backgroundColor: const Color(0xFFE6F2F2),
-                                    padding: EdgeInsets.zero,
-                                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                  )
+                                  Text("Batch #$logBatch ➔ $qty Pcs ($side Side)", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                  if (explicitlyHasIssues)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(color: Colors.red.shade100, borderRadius: BorderRadius.circular(4)),
+                                      child: const Text("ANOMALY FLAG DETECTED", style: TextStyle(color: Colors.red, fontSize: 10, fontWeight: FontWeight.bold)),
+                                    ),
                                 ],
                               ),
-                              const SizedBox(height: 4),
-                              Text("Operator ID Profile: $operator", style: const TextStyle(fontSize: 12, color: Colors.black87)),
+                              const SizedBox(height: 6),
+                              Text("Operator Sign-Off: $operator", style: const TextStyle(fontSize: 12, color: Colors.black87)),
                               
-                              if (explicitlyHasIssues) ...[
-                                const SizedBox(height: 6),
-                                const Text("Registered Quality Defect Variances:", style: TextStyle(fontSize: 11, color: Colors.red, fontWeight: FontWeight.bold)),
-                                ...activeDefectsFormatted.map((def) => Padding(
+                              if (activeDefects.isNotEmpty) ...[
+                                const SizedBox(height: 8),
+                                const Text("Flagged Structural Anomalies:", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.red)),
+                                const SizedBox(height: 2),
+                                ...activeDefects.map((def) => Padding(
                                   padding: const EdgeInsets.only(left: 6.0, top: 1.0, bottom: 1.0),
                                   child: Row(
                                     children: [
