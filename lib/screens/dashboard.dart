@@ -43,9 +43,8 @@ class DashboardScreen extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () {
-              // Direct state mutations to flush operational tokens safely
-              stateEngine.currentUser = null;
-              stateEngine.activePunchInTime = null;
+              // ISSUE #4 FIX: Call centralized session purge to clear historical logs and arrays safely
+              stateEngine.clearSession();
               Navigator.pushReplacementNamed(context, '/login');
             },
           )
@@ -161,7 +160,7 @@ class OperatorSupervisorHub extends StatelessWidget {
   Widget build(BuildContext context) {
     final stateEngine = Provider.of<EMSStateEngine>(context);
     final user = stateEngine.currentUser;
-    final String displayRole = (user?.role ?? 'Operator').toUpperCase();
+    final String displayRole = (user?.role ?? 'Operator').trim().toUpperCase();
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
@@ -174,8 +173,8 @@ class OperatorSupervisorHub extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () {
-              stateEngine.currentUser = null;
-              stateEngine.activePunchInTime = null;
+              // ISSUE #4 FIX: Call centralized session purge to clear historical logs and arrays safely
+              stateEngine.clearSession();
               Navigator.pushReplacementNamed(context, '/login');
             },
           )
@@ -297,7 +296,7 @@ class _OperationalAnalyticsMatrixViewState extends State<OperationalAnalyticsMat
     // Visibility Scoping: Workers see targeted items matching their node assignment; Management sweeps all.
     final displayTargets = state.targetingMatrix.where((t) {
       if (isManagement) return true;
-      return t.team == state.currentUser?.team && t.segment == state.currentUser?.segment;
+      return t.team?.trim() == state.currentUser?.team?.trim() && t.segment?.trim() == state.currentUser?.segment?.trim();
     }).toList();
 
     return Scaffold(
@@ -335,6 +334,7 @@ class _OperationalAnalyticsMatrixViewState extends State<OperationalAnalyticsMat
                     child: DropdownButtonFormField<String>(
                       value: _segmentTarget,
                       decoration: const InputDecoration(labelText: "Floor Segment Node", border: OutlineInputBorder()),
+                      // ISSUE #2 & #3 FIX: Changed to standardized 'Through hole' definition
                       items: ["SMT", "Through hole", "None"].map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
                       onChanged: (v) => setState(() => _segmentTarget = v!),
                     ),
@@ -379,14 +379,14 @@ class _OperationalAnalyticsMatrixViewState extends State<OperationalAnalyticsMat
                                 "target_qty": q
                               }),
                             );
-                            if (res.statusCode == 200) {
+                            
+                            // ISSUE #1 FIX: Added mounted check to prevent context state memory leaks
+                            if (res.statusCode == 200 && mounted) {
                               await state.fetchAndSyncFromBackend();
                               _targetQtyController.clear();
-                              if (mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text("Target profile committed safely."), backgroundColor: Colors.green)
-                                );
-                              }
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text("Target profile committed safely."), backgroundColor: Colors.green)
+                              );
                             }
                           } catch (e) {
                             if (mounted) {
