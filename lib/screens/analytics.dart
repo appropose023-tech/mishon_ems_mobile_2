@@ -134,7 +134,7 @@ class _OperationalAnalyticsMatrixViewState extends State<OperationalAnalyticsMat
                                 const SnackBar(content: Text("Failed to save target entry bounds securely."), backgroundColor: Colors.red)
                               );
                             }
-                          } finaly {
+                          } finally { // FIXED: Corrected spelling from finaly to finally
                             if (mounted) {
                               setState(() => _isProcessingTarget = false);
                             }
@@ -292,7 +292,8 @@ class _OperationalAnalyticsMatrixViewState extends State<OperationalAnalyticsMat
                                 const Text("Flagged Structural Anomalies:", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.red)),
                                 const SizedBox(height: 2),
                                 ...activeDefects.map((def) => Padding(
-                                  padding: const EdgeInsets.only(left: 6.0, vertical: 1),
+                                  // FIXED: Changed parameter format to match standard EdgeInsets.only constraints
+                                  padding: const EdgeInsets.only(left: 6.0, top: 1.0, bottom: 1.0),
                                   child: Row(
                                     children: [
                                       const Icon(Icons.label_important, size: 12, color: Colors.red),
