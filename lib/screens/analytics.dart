@@ -161,11 +161,12 @@ class _OperationalAnalyticsMatrixViewState extends State<OperationalAnalyticsMat
                       return Card(
                         color: isPunchIn ? const Color(0xFFF0FDF4) : const Color(0xFFFEF2F2),
                         margin: const EdgeInsets.symmetric(vertical: 4),
-                        child: ListTile(
-                          leading: Icon(isPunchIn ? Icons.login : Icons.logout, color: isPunchIn ? Colors.emerald : Colors.red),
+                        // ... inside lib/screens/analytics.dart
+                        ListTile(
+                          leading: Icon(isPunchIn ? Icons.login : Icons.logout, color: isPunchIn ? Colors.green : Colors.red),
                           title: Text("Operator: ${item['operator_username']} — ${item['action_type']}", style: const TextStyle(fontWeight: FontWeight.bold)),
                           subtitle: Text("Timestamp Structural Stamp: ${item['log_timestamp']}"),
-                        ),
+                        )
                       );
                     }
                     return const SizedBox.shrink();
