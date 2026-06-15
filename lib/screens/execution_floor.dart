@@ -61,6 +61,19 @@ class _ExecutionFloorAssemblyViewState extends State<ExecutionFloorAssemblyView>
       }
     }
 
+    // Look up the targeted threshold bound dynamically from targeting matrix
+    int targetedVolumeRequired = 0;
+    if (_selectedBatchNo != null) {
+      try {
+        final matchingTarget = state.targetingMatrix.firstWhere(
+          (t) => t.batchNo == _selectedBatchNo && t.segment == userSegment && t.team == userTeam
+        );
+        targetedVolumeRequired = matchingTarget.targetQty;
+      } catch (_) {
+        targetedVolumeRequired = 0; // Fallback bound configuration
+      }
+    }
+
     // Read counter yields safely from memory maps inside app_state
     int currentTopYield = _selectedBatchNo != null ? state.getLayerRunningTotal(_selectedBatchNo!, "TOP") : 0;
     int currentBottomYield = _selectedBatchNo != null ? state.getLayerRunningTotal(_selectedBatchNo!, "BOTTOM") : 0;
@@ -147,7 +160,7 @@ class _ExecutionFloorAssemblyViewState extends State<ExecutionFloorAssemblyView>
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                "🎯 Target Threshold Bound: ${currentSelectedBatch.targetQty} Units Required",
+                                "🎯 Target Threshold Bound: $targetedVolumeRequired Units Required",
                                 style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF166534), fontSize: 13),
                               ),
                               const Divider(height: 20),
@@ -201,7 +214,7 @@ class _ExecutionFloorAssemblyViewState extends State<ExecutionFloorAssemblyView>
                       const Text(
                         "AOI Solder & Defect Percentage Flag Matrix",
                         style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF004d4d)),
-                      ),
+                    ),
                       const SizedBox(height: 8),
                       
                       // RENDER PERCENT SLIDERS
