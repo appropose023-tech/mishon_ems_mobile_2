@@ -112,6 +112,7 @@ class _InterDepartmentLedgerGatewayViewState extends State<InterDepartmentLedger
                         const SizedBox(height: 8),
                         if (state.batches.isEmpty)
                           const Text("No batches available inside memory cache buffers.", style: TextStyle(color: Colors.white38, fontSize: 12)),
+                        // ... inside lib/screens/ledger_transfer.dart (Management View Section)
                         ...state.batches.map((b) {
                           return Padding(
                             padding: const EdgeInsets.symmetric(vertical: 4.0),
@@ -119,7 +120,7 @@ class _InterDepartmentLedgerGatewayViewState extends State<InterDepartmentLedger
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 Text("Batch #${b.batchNo} (${b.jobName}):", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 12)),
-                                Text("${b.targetQty} Units [Status: ${b.status}]", style: TextStyle(color: b.status == 'OPEN' ? Colors.greenAccent : Colors.amberAccent, fontSize: 12, fontWeight: FontWeight.bold)),
+                                Text("Status: ${b.status}", style: TextStyle(color: b.status == 'OPEN' ? Colors.greenAccent : Colors.amberAccent, fontSize: 12, fontWeight: FontWeight.bold)),
                               ],
                             ),
                           );
