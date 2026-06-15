@@ -48,7 +48,6 @@ class _ExecutionFloorAssemblyViewState extends State<ExecutionFloorAssemblyView>
     List<JobBatch> visibleBatches = state.batches.where((b) {
       if (b.status != 'OPEN') return false;
       if (isManagement) return true;
-      // Scoping visibility to matching user segment metadata bounds
       return true; 
     }).toList();
 
@@ -113,7 +112,7 @@ class _ExecutionFloorAssemblyViewState extends State<ExecutionFloorAssemblyView>
                       ],
                     ),
                     const SizedBox(height: 16),
-
+                    
                     // BATCH SELECTOR DROPDOWN BOUND CONSTRAINTS
                     const Text(
                       "Select Production Job Target",
@@ -134,38 +133,29 @@ class _ExecutionFloorAssemblyViewState extends State<ExecutionFloorAssemblyView>
                           child: Text("Batch #${b.batchNo} — ${b.jobName} [Client: ${b.clientName}]"),
                         );
                       }).toList(),
-                      onChanged: (val) {
-                        setState(() {
-                          _selectedBatchNo = val;
-                        });
-                      },
+                      onChanged: (val) => setState(() => _selectedBatchNo = val),
                     ),
 
                     if (currentSelectedBatch != null) ...[
                       const SizedBox(height: 16),
-                      // REAL-TIME CACHED QUANTITY BALANCES CARD
                       Card(
                         color: const Color(0xFFF0FDF4),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          side: const BorderSide(color: Colors.greenAccent, width: 1),
-                        ),
+                        elevation: 0.5,
                         child: Padding(
                           padding: const EdgeInsets.all(16.0),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                "🎯 Target Threshold constraint: ${currentSelectedBatch.targetQty} Units",
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF166534)),
+                                "🎯 Target Threshold Bound: ${currentSelectedBatch.targetQty} Units Required",
+                                style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF166534), fontSize: 13),
                               ),
-                              const Divider(height: 16, color: Colors.greenAccent),
+                              const Divider(height: 20),
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                                 children: [
-                                  _buildMetricNode("TOP LAYER YIELD", "$currentTopYield Pcs"),
-                                  _buildMetricNode("BOTTOM LAYER YIELD", "$currentBottomYield Pcs"),
-                                  _buildMetricNode("TOTAL PROCESSED", "${currentTopYield + currentBottomYield} Pcs"),
+                                  _buildMetricNode("TOP LAYER YIELD", "$currentTopYield Pcs Completed"),
+                                  _buildMetricNode("BOTTOM LAYER YIELD", "$currentBottomYield Pcs Completed"),
                                 ],
                               )
                             ],
@@ -173,165 +163,123 @@ class _ExecutionFloorAssemblyViewState extends State<ExecutionFloorAssemblyView>
                         ),
                       ),
                       
-                      const SizedBox(height: 20),
-                      const Text(
-                        "Surface Board Configuration Parameters",
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF004d4d)),
-                      ),
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 16),
                       DropdownButtonFormField<String>(
                         value: _surfaceConfig,
-                        decoration: const InputDecoration(border: OutlineInputBorder(), filled: true, fillColor: Colors.white),
+                        decoration: const InputDecoration(
+                          labelText: "Board Surface Topology Configuration",
+                          border: OutlineInputBorder(),
+                        ),
                         items: ["Single-Sided", "Double-Sided Flipping"].map((s) {
                           return DropdownMenuItem(value: s, child: Text(s));
                         }).toList(),
                         onChanged: (v) => setState(() => _surfaceConfig = v!),
                       ),
-
-                      const SizedBox(height: 16),
-                      const Text(
-                        "Target Process Alignment Layer Side",
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF004d4d)),
-                      ),
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 12),
                       DropdownButtonFormField<String>(
                         value: _activeLayer,
-                        decoration: const InputDecoration(border: OutlineInputBorder(), filled: true, fillColor: Colors.white),
+                        decoration: const InputDecoration(
+                          labelText: "Layer Feed Side Matrix Target",
+                          border: OutlineInputBorder(),
+                        ),
                         items: ["TOP", "BOTTOM"].map((l) {
-                          return DropdownMenuItem(value: l, child: Text("$l Layer Feed"));
+                          return DropdownMenuItem(value: l, child: Text(l));
                         }).toList(),
                         onChanged: (v) => setState(() => _activeLayer = v!),
                       ),
-
-                      const SizedBox(height: 16),
-                      const Text(
-                        "Hourly Production Quantity Processed Successfully",
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF004d4d)),
-                      ),
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 12),
                       TextField(
                         controller: _qtyController,
                         keyboardType: TextInputType.number,
                         decoration: const InputDecoration(
+                          labelText: "Hourly Processed Volume Success (Units)",
                           border: OutlineInputBorder(),
-                          filled: true,
-                          fillColor: Colors.white,
-                          hintText: "Enter exact processed output metrics...",
                         ),
                       ),
 
-                      const SizedBox(height: 24),
-                      // QUALITY INSPECTION & DEFECT MODAL LAYOUT
-                      Row(
-                        children: const [
-                          Icon(Icons.biotech, color: Color(0xFF004d4d)),
-                          SizedBox(width: 8),
-                          Text(
-                            "AOI Solder & Defect Percentage Flag Matrix",
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF004d4d)),
-                          ),
-                        ],
-                      ),
+                      const SizedBox(height: 20),
                       const Text(
-                        "Specify the estimated rate of loss if any defect threshold constraints occur.",
-                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                        "AOI Solder & Defect Percentage Flag Matrix",
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF004d4d)),
                       ),
                       const SizedBox(height: 8),
                       
+                      // RENDER PERCENT SLIDERS
                       Card(
+                        elevation: 0.5,
                         color: Colors.white,
-                        elevation: 1,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                         child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 12.0),
+                          padding: const EdgeInsets.symmetric(vertical: 8.0),
                           child: Column(
                             children: _defectChecklist.keys.map((defectKey) {
-                              double currentSliderValue = _defectChecklist[defectKey] ?? 0.0;
-                              return Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Padding(
-                                    padding: const EdgeInsets.only(left: 6.0, top: 6.0),
-                                    child: Row(
+                              double curVal = _defectChecklist[defectKey] ?? 0.0;
+                              return Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
                                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                       children: [
+                                        Text(defectKey, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Colors.black87)),
                                         Text(
-                                          defectKey,
-                                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-                                        ),
-                                        Text(
-                                          "${currentSliderValue.toStringAsFixed(0)}% Loss",
+                                          "${curVal.toStringAsFixed(0)}% Loss Rate", 
                                           style: TextStyle(
-                                            color: currentSliderValue > 0 ? Colors.red.shade700 : Colors.grey,
+                                            color: curVal > 0 ? Colors.red : Colors.grey, 
                                             fontWeight: FontWeight.bold,
-                                            fontSize: 13
+                                            fontSize: 12
                                           ),
                                         ),
                                       ],
                                     ),
-                                  ),
-                                  Slider(
-                                    value: currentSliderValue,
-                                    min: 0.0,
-                                    max: 100.0,
-                                    divisions: 20,
-                                    activeColor: currentSliderValue > 0 ? Colors.red.shade600 : const Color(0xFF008080),
-                                    inactiveColor: Colors.grey.shade200,
-                                    onChanged: (newValue) {
-                                      setState(() {
-                                        _defectChecklist[defectKey] = newValue;
-                                      });
-                                    },
-                                  ),
-                                ],
+                                    Slider(
+                                      value: curVal,
+                                      min: 0.0,
+                                      max: 100.0,
+                                      divisions: 20,
+                                      activeColor: curVal > 0 ? Colors.red : const Color(0xFF008080),
+                                      inactiveColor: Colors.grey.shade200,
+                                      onChanged: (nv) => setState(() => _defectChecklist[defectKey] = nv),
+                                    ),
+                                  ],
+                                ),
                               );
                             }).toList(),
                           ),
                         ),
                       ),
 
-                      const SizedBox(height: 16),
-                      const Text(
-                        "Execution Engineering Remarks & Delay Logs",
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF004d4d)),
-                      ),
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 12),
                       TextField(
                         controller: _commentController,
-                        maxLines: 2,
                         decoration: const InputDecoration(
+                          labelText: "Delay Log Remarks & Process Signatures",
                           border: OutlineInputBorder(),
-                          filled: true,
-                          fillColor: Colors.white,
-                          hintText: "Log equipment bottlenecks, material issues, or standard runtime notes here...",
                         ),
                       ),
-
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 20),
                       _isSubmitting
                           ? const Center(child: CircularProgressIndicator(color: Color(0xFF008080)))
                           : ElevatedButton(
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: const Color(0xFF008080),
-                                padding: const EdgeInsets.symmetric(vertical: 16),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                padding: const EdgeInsets.symmetric(vertical: 14),
                               ),
                               onPressed: () async {
                                 int inputQty = int.tryParse(_qtyController.text) ?? 0;
                                 if (inputQty <= 0) {
                                   ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text("Processed production volume must be greater than zero."), backgroundColor: Colors.orange)
+                                    const SnackBar(content: Text("Please supply positive yield metric quantities before committing."))
                                   );
                                   return;
                                 }
-
                                 setState(() => _isSubmitting = true);
 
-                                // Pack the defect sliders matrix into standard key-value maps safely
-                                Map<String, int> structuredDefectsJson = {};
-                                _defectChecklist.forEach((key, val) {
-                                  if (val > 0) {
-                                    structuredDefectsJson[key] = val.toInt();
+                                // Map numerical double integers cleanly into network uploads
+                                Map<String, int> structuredDefects = {};
+                                _defectChecklist.forEach((k, v) {
+                                  if (v > 0) {
+                                    structuredDefects[k] = v.toInt();
                                   }
                                 });
 
@@ -341,33 +289,23 @@ class _ExecutionFloorAssemblyViewState extends State<ExecutionFloorAssemblyView>
                                     headers: {"Content-Type": "application/json"},
                                     body: json.encode({
                                       "batch_no": _selectedBatchNo,
-                                      "operator_username": state.currentUser?.username ?? 'Unknown Operator',
+                                      "operator_username": state.currentUser?.username ?? 'Operator',
                                       "side": _activeLayer,
                                       "qty_done": inputQty,
-                                      "defects": structuredDefectsJson,
+                                      "defects": structuredDefects,
                                       "comments": _commentController.text,
                                       "board_config": _surfaceConfig
                                     }),
                                   );
-
+                                  
                                   if (response.statusCode == 200) {
-                                    // Complete database state handshake update loop
                                     await state.fetchAndSyncFromBackend();
-                                    
-                                    _commentController.clear();
-                                    _qtyController.text = "1";
-                                    _defectChecklist.updateAll((key, value) => 0.0);
-
                                     if (mounted) {
+                                      _commentController.clear();
+                                      _qtyController.text = "1";
+                                      _defectChecklist.updateAll((key, value) => 0.0);
                                       ScaffoldMessenger.of(context).showSnackBar(
                                         const SnackBar(content: Text("Performance block committed successfully to structural database."), backgroundColor: Colors.green)
-                                      );
-                                    }
-                                  } else {
-                                    final responseData = json.decode(response.body);
-                                    if (mounted) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(content: Text("Rejection Error: ${responseData['message'] ?? 'Handshake transaction failed.'}"), backgroundColor: Colors.red)
                                       );
                                     }
                                   }
