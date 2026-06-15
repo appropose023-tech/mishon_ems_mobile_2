@@ -35,7 +35,7 @@ class _InterDepartmentLedgerGatewayViewState extends State<InterDepartmentLedger
     final String userSegment = state.currentUser?.segment ?? 'None';
     final bool isManagement = (role == 'admin' || role == 'manager');
 
-    // 1. FILTER FORM ACCESSIBLE BATCHES BY TARGET PARAMETERS FOR OPERATORS
+    // Filter active open batches so floor operators only see their assigned target segments/teams
     List<JobBatch> visibleFormBatches = state.batches.where((b) => b.status == 'OPEN').toList();
     if (!isManagement) {
       visibleFormBatches = visibleFormBatches.where((b) => 
@@ -52,14 +52,14 @@ class _InterDepartmentLedgerGatewayViewState extends State<InterDepartmentLedger
       _batchNo = null;
     }
 
-    // 2. CONTEXT LOG SCOPING: Workers filter by area node, admin observes the global log stream
+    // Visibility Scoping Layer for Logs filtering
     final filteredLedger = state.materialLedger.where((ent) {
       if (isManagement) return true;
       return ent.fromStage == userSegment || ent.toStage == userSegment;
     }).toList();
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF1F5F9), // Clean slate UI background
+      backgroundColor: const Color(0xFFF1F5F9), // Light background replaces harsh full dark modes
       appBar: AppBar(
         title: const Text("Inter-Department Ledgers"),
         backgroundColor: const Color(0xFF008080),
@@ -75,7 +75,7 @@ class _InterDepartmentLedgerGatewayViewState extends State<InterDepartmentLedger
               Card(
                 elevation: 0,
                 color: const Color(0xFFE2E8F0),
-                margin: const EdgeInsets.bottom(16),
+                margin: const EdgeInsets.only(bottom: 16), // FIXED: Changed from invalid .bottom constructor
                 child: Padding(
                   padding: const EdgeInsets.all(12.0),
                   child: Row(
@@ -93,14 +93,14 @@ class _InterDepartmentLedgerGatewayViewState extends State<InterDepartmentLedger
                 ),
               ),
 
-              // Scrollable container for Forms and Administrative Split Panels
+              // Wrap entry utilities inside a scrollable layer, reserving a fixed area below for ledger data blocks
               Expanded(
                 flex: 4,
                 child: SingleChildScrollView(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      // RESTORED ADMINISTRATIVE GLOBAL QUANTITY SPLIT-STATUS REPORT MATRIX
+                      // ADMINISTRATIVE GLOBAL QUANTITY SPLIT-STATUS REPORT MATRIX
                       if (isManagement) ...[
                         const Text(
                           "📋 Management System Matrix Split View (Current Status)", 
@@ -108,16 +108,18 @@ class _InterDepartmentLedgerGatewayViewState extends State<InterDepartmentLedger
                         ),
                         const SizedBox(height: 8),
                         Card(
-                          color: const Color(0xFF1E293B), // Premium dark theme contrast card
-                          elevation: 2,
+                          color: Colors.blueGrey.shade900,
+                          elevation: 3,
                           child: Padding(
                             padding: const EdgeInsets.all(14.0),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: state.batches.map((b) {
+                                // Calculate dynamic tracking metrics per staging area from raw ledger blocks
                                 int inSMT = b.status == 'CLOSED' ? 0 : b.initialQty; 
                                 int inTH = 0;
 
+                                // Scan total transfers to adjust balances per stage
                                 for (var log in state.materialLedger) {
                                   if (log.batchNo == b.batchNo) {
                                     if (log.fromStage == 'SMT') inSMT -= log.qtyTransferred;
@@ -134,20 +136,19 @@ class _InterDepartmentLedgerGatewayViewState extends State<InterDepartmentLedger
                                   child: Row(
                                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                     children: [
-                                      Expanded(
-                                        child: Text(
-                                          "Lot #${b.batchNo} (${b.jobName})",
-                                          style: const TextStyle(color: Colors.white, fontFamily: 'monospace', fontSize: 12),
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
+                                      Text(
+                                        "Lot #${b.batchNo} (${b.jobName.padRight(12).substring(0,12)})",
+                                        style: const TextStyle(color: Colors.white, fontFamily: 'monospace', fontSize: 12),
                                       ),
                                       Text(
-                                        isClosed ? "🔒 LOCKED" : "SMT: $inSMT | TH: $inTH",
+                                        isClosed 
+                                            ? "🟢 LOCKED [BILLING/DISPATCH]" 
+                                            : "SMT Bal: $inSMT | TH Bal: $inTH",
                                         style: TextStyle(
-                                          color: isClosed ? Colors.grey : const Color(0xFF4ADE80), 
+                                          color: isClosed ? Colors.grey.shade400 : Colors.greenAccent, 
                                           fontFamily: 'monospace', 
                                           fontSize: 12,
-                                          fontWeight: FontWeight.bold
+                                          fontWeight: isClosed ? FontWeight.normal : FontWeight.bold
                                         ),
                                       ),
                                     ],
@@ -162,8 +163,6 @@ class _InterDepartmentLedgerGatewayViewState extends State<InterDepartmentLedger
 
                       const Text("Log Inter-Department Transfer Route", style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF004d4d))),
                       const SizedBox(height: 12),
-                      
-                      // Dropdown layout wrapped in expanding constraint container with layout boundary truncation
                       DropdownButtonFormField<String>(
                         value: _batchNo,
                         hint: const Text("Select active job lot..."),
@@ -221,8 +220,6 @@ class _InterDepartmentLedgerGatewayViewState extends State<InterDepartmentLedger
                                 int count = int.tryParse(_qtyController.text) ?? 0;
                                 if (_batchNo != null && count > 0) {
                                   setState(() => _isSubmitting = true);
-                                  
-                                  // RESTORED CORRECT STATE PIPELINE DISPATCH WRAPPER
                                   final err = await state.executeLedgerTransfer(
                                     _batchNo!,
                                     _fromStage,
@@ -230,7 +227,6 @@ class _InterDepartmentLedgerGatewayViewState extends State<InterDepartmentLedger
                                     count,
                                     _remarksController.text.trim(),
                                   );
-                                  
                                   setState(() => _isSubmitting = false);
                                   if (err == null) {
                                     _qtyController.clear();
@@ -257,7 +253,7 @@ class _InterDepartmentLedgerGatewayViewState extends State<InterDepartmentLedger
                 ),
               ),
 
-              // Independent UI Context bounding box holding the scoped history log lists safely
+              // Bounded constraint box tracking visual list updates safely without screen layout structural crashes
               Expanded(
                 flex: 3,
                 child: filteredLedger.isEmpty
@@ -290,8 +286,7 @@ class _InterDepartmentLedgerGatewayViewState extends State<InterDepartmentLedger
                                   ),
                                   const SizedBox(height: 4),
                                   Text("Sequence Vector: ${ent.fromStage} ➔ ${ent.toStage}", style: const TextStyle(fontSize: 13, color: Colors.black87)),
-                                  if (ent.comments.isNotEmpty) 
-                                    Text("Comments: ${ent.comments}", style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: Colors.black54)),
+                                  if (ent.comments.isNotEmpty) Text("Comments: ${ent.comments}", style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: Colors.black54)),
                                   const Divider(height: 8),
                                   Row(
                                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
