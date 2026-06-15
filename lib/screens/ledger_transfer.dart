@@ -29,20 +29,37 @@ class _InterDepartmentLedgerGatewayViewState extends State<InterDepartmentLedger
   @override
   Widget build(BuildContext context) {
     final state = Provider.of<EMSStateEngine>(context);
+    
     final String role = (state.currentUser?.role ?? 'operator').trim().toLowerCase();
+    final String userTeam = state.currentUser?.team ?? 'None';
     final String userSegment = state.currentUser?.segment ?? 'None';
     final bool isManagement = (role == 'admin' || role == 'manager');
 
-    List<JobBatch> openBatches = state.batches.where((b) => b.status == 'OPEN').toList();
+    // 1. FILTER FORM ACCESSIBLE BATCHES BY TARGET PARAMETERS FOR OPERATORS
+    List<JobBatch> visibleFormBatches = state.batches.where((b) => b.status == 'OPEN').toList();
+    if (!isManagement) {
+      visibleFormBatches = visibleFormBatches.where((b) => 
+        state.targetingMatrix.any((target) => 
+          target.batchNo == b.batchNo && 
+          target.segment == userSegment && 
+          target.team == userTeam
+        )
+      ).toList();
+    }
 
-    // Visibility Scoping Layer for Logs filtering
+    // Dynamic safety fallback if a previously selected batch falls out of scope following a sync loop
+    if (_batchNo != null && !visibleFormBatches.any((b) => b.batchNo == _batchNo)) {
+      _batchNo = null;
+    }
+
+    // 2. CONTEXT LOG SCOPING: Workers filter by area node, admin observes the global log stream
     final filteredLedger = state.materialLedger.where((ent) {
       if (isManagement) return true;
       return ent.fromStage == userSegment || ent.toStage == userSegment;
     }).toList();
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF1F5F9), // Light background replaces harsh full dark modes
+      backgroundColor: const Color(0xFFF1F5F9), // Clean slate UI background
       appBar: AppBar(
         title: const Text("Inter-Department Ledgers"),
         backgroundColor: const Color(0xFF008080),
@@ -76,19 +93,90 @@ class _InterDepartmentLedgerGatewayViewState extends State<InterDepartmentLedger
                 ),
               ),
 
-              // Wrap entry utilities inside a scrollable layer, reserving a fixed area below for ledger data blocks
+              // Scrollable container for Forms and Administrative Split Panels
               Expanded(
+                flex: 4,
                 child: SingleChildScrollView(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      // RESTORED ADMINISTRATIVE GLOBAL QUANTITY SPLIT-STATUS REPORT MATRIX
+                      if (isManagement) ...[
+                        const Text(
+                          "📋 Management System Matrix Split View (Current Status)", 
+                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF004d4d))
+                        ),
+                        const SizedBox(height: 8),
+                        Card(
+                          color: const Color(0xFF1E293B), // Premium dark theme contrast card
+                          elevation: 2,
+                          child: Padding(
+                            padding: const EdgeInsets.all(14.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: state.batches.map((b) {
+                                int inSMT = b.status == 'CLOSED' ? 0 : b.initialQty; 
+                                int inTH = 0;
+
+                                for (var log in state.materialLedger) {
+                                  if (log.batchNo == b.batchNo) {
+                                    if (log.fromStage == 'SMT') inSMT -= log.qtyTransferred;
+                                    if (log.toStage == 'SMT') inSMT += log.qtyTransferred;
+                                    if (log.fromStage == 'Through hole') inTH -= log.qtyTransferred;
+                                    if (log.toStage == 'Through hole') inTH += log.qtyTransferred;
+                                  }
+                                }
+
+                                bool isClosed = b.status == 'CLOSED';
+
+                                return Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 4.0),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          "Lot #${b.batchNo} (${b.jobName})",
+                                          style: const TextStyle(color: Colors.white, fontFamily: 'monospace', fontSize: 12),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      Text(
+                                        isClosed ? "🔒 LOCKED" : "SMT: $inSMT | TH: $inTH",
+                                        style: TextStyle(
+                                          color: isClosed ? Colors.grey : const Color(0xFF4ADE80), 
+                                          fontFamily: 'monospace', 
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                          ),
+                        ),
+                        const Divider(height: 32, thickness: 1.5),
+                      ],
+
                       const Text("Log Inter-Department Transfer Route", style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF004d4d))),
                       const SizedBox(height: 12),
+                      
+                      // Dropdown layout wrapped in expanding constraint container with layout boundary truncation
                       DropdownButtonFormField<String>(
                         value: _batchNo,
                         hint: const Text("Select active job lot..."),
+                        isExpanded: true,
                         decoration: const InputDecoration(border: OutlineInputBorder(), filled: true, fillColor: Colors.white),
-                        items: openBatches.map((b) => DropdownMenuItem(value: b.batchNo, child: Text("Batch #${b.batchNo} - ${b.jobName}"))).toList(),
+                        items: visibleFormBatches.map((b) => DropdownMenuItem(
+                          value: b.batchNo, 
+                          child: Text(
+                            "Batch #${b.batchNo} - ${b.jobName} [Avail: ${b.initialQty}]",
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                          )
+                        )).toList(),
                         onChanged: (v) => setState(() => _batchNo = v),
                       ),
                       const SizedBox(height: 12),
@@ -97,7 +185,7 @@ class _InterDepartmentLedgerGatewayViewState extends State<InterDepartmentLedger
                           Expanded(
                             child: DropdownButtonFormField<String>(
                               value: _fromStage,
-                              decoration: const InputDecoration(labelText: "Source Stage Node", border: OutlineInputBorder()),
+                              decoration: const InputDecoration(labelText: "Source Stage Node", border: OutlineInputBorder(), filled: true, fillColor: Colors.white),
                               items: ["SMT", "Through hole", "Quality", "Packing"].map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
                               onChanged: (v) => setState(() => _fromStage = v!),
                             ),
@@ -106,7 +194,7 @@ class _InterDepartmentLedgerGatewayViewState extends State<InterDepartmentLedger
                           Expanded(
                             child: DropdownButtonFormField<String>(
                               value: _toStage,
-                              decoration: const InputDecoration(labelText: "Target Destination Node", border: OutlineInputBorder()),
+                              decoration: const InputDecoration(labelText: "Target Destination Node", border: OutlineInputBorder(), filled: true, fillColor: Colors.white),
                               items: ["SMT", "Through hole", "Quality", "Packing"].map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
                               onChanged: (v) => setState(() => _toStage = v!),
                             ),
@@ -133,14 +221,16 @@ class _InterDepartmentLedgerGatewayViewState extends State<InterDepartmentLedger
                                 int count = int.tryParse(_qtyController.text) ?? 0;
                                 if (_batchNo != null && count > 0) {
                                   setState(() => _isSubmitting = true);
-                                  final err = await state.injectLedgerTransaction(
-                                    batchNo: _batchNo!,
-                                    fromStage: _fromStage,
-                                    toStage: _toStage,
-                                    qty: count,
-                                    operator: state.currentUser?.username ?? 'System',
-                                    comments: _remarksController.text,
+                                  
+                                  // RESTORED CORRECT STATE PIPELINE DISPATCH WRAPPER
+                                  final err = await state.executeLedgerTransfer(
+                                    _batchNo!,
+                                    _fromStage,
+                                    _toStage,
+                                    count,
+                                    _remarksController.text.trim(),
                                   );
+                                  
                                   setState(() => _isSubmitting = false);
                                   if (err == null) {
                                     _qtyController.clear();
@@ -150,7 +240,7 @@ class _InterDepartmentLedgerGatewayViewState extends State<InterDepartmentLedger
                                     }
                                   } else {
                                     if (mounted) {
-                                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err), backgroundColor: Colors.red));
+                                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Pipeline Failure: $err"), backgroundColor: Colors.red));
                                     }
                                   }
                                 } else {
@@ -167,8 +257,9 @@ class _InterDepartmentLedgerGatewayViewState extends State<InterDepartmentLedger
                 ),
               ),
 
-              // Rigid, explicit layout boundaries prevent any multi-line strings from crashing the screen structure
+              // Independent UI Context bounding box holding the scoped history log lists safely
               Expanded(
+                flex: 3,
                 child: filteredLedger.isEmpty
                     ? const Center(child: Text("No tracking items allocated inside your node history context.", style: TextStyle(color: Colors.grey)))
                     : ListView.builder(
@@ -199,7 +290,8 @@ class _InterDepartmentLedgerGatewayViewState extends State<InterDepartmentLedger
                                   ),
                                   const SizedBox(height: 4),
                                   Text("Sequence Vector: ${ent.fromStage} ➔ ${ent.toStage}", style: const TextStyle(fontSize: 13, color: Colors.black87)),
-                                  if (ent.comments.isNotEmpty) Text("Comments: ${ent.comments}", style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: Colors.black54)),
+                                  if (ent.comments.isNotEmpty) 
+                                    Text("Comments: ${ent.comments}", style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: Colors.black54)),
                                   const Divider(height: 8),
                                   Row(
                                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
