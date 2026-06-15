@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:excel/excel.dart';
 import 'package:path_provider/path_provider.dart';
 import '../app_state.dart';
+import '../models.dart';
 
 class KitSynchronizerScreen extends StatefulWidget {
   const KitSynchronizerScreen({super.key});
@@ -14,6 +15,17 @@ class KitSynchronizerScreen extends StatefulWidget {
 
 class _KitSynchronizerScreenState extends State<KitSynchronizerScreen> {
   bool _isExporting = false;
+
+  /// Helper method to safely extract targetQty allocations for export rows
+  /// preventing the 'targetQty isn't defined for the type JobBatch' compilation error.
+  int _extractTargetQtyForBatch(EMSStateEngine state, String batchNo) {
+    try {
+      final match = state.targetingMatrix.firstWhere((t) => t.batchNo == batchNo);
+      return match.targetQty;
+    } catch (_) {
+      return 0; // Standard fallback bound if no explicit matrix constraint is assigned
+    }
+  }
 
   // SYSTEM EXCEL ENGINE GENERATOR SEQUENCE
   Future<void> _handleExcelGenerationSequence(EMSStateEngine state) async {
@@ -53,10 +65,13 @@ class _KitSynchronizerScreenState extends State<KitSynchronizerScreen> {
           }
         }
 
+        // Resolving the compilation error dynamically using the state engine lookup matrix
+        int targetQuantityValue = _extractTargetQtyForBatch(state, batch.batchNo);
+
         sheetObject.appendRow([
           TextCellValue(batch.batchNo),
           TextCellValue(batch.clientName),
-          IntCellValue(batch.targetQty),
+          IntCellValue(targetQuantityValue),
           TextCellValue("140 Mins (Logged Status)"), 
           TextCellValue("95 Mins (Logged Status)"),
           TextCellValue("45 Mins (Logged Status)"),
@@ -76,7 +91,11 @@ class _KitSynchronizerScreenState extends State<KitSynchronizerScreen> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Excel exported successfully to: $fileDestinationPath"), backgroundColor: Colors.green, duration: const Duration(seconds: 5))
+          SnackBar(
+            content: Text("Excel exported successfully to: $fileDestinationPath"), 
+            backgroundColor: Colors.green, 
+            duration: const Duration(seconds: 5),
+          ),
         );
       }
     } catch (e) {
@@ -129,7 +148,7 @@ class _KitSynchronizerScreenState extends State<KitSynchronizerScreen> {
                 color: const Color(0xFFE6F2F2),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: const BorderSide(color: Color(0xFF008080), width: 0.5)),
                 child: const Padding(
-                  padding: const EdgeInsets.all(16.0),
+                  padding: EdgeInsets.all(16.0),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
