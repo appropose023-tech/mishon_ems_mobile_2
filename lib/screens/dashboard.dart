@@ -1,7 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart';
+import 'package:csv/csv.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
+
 import '../app_state.dart';
 import '../models.dart';
 
@@ -21,12 +27,88 @@ import 'shift_clock.dart';
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
 
+  // EXCEL / CSV CYCLE TIME DATA EXPORT ENGINE
+  Future<void> _exportOperationalBatchReport(BuildContext context, EMSStateEngine state) async {
+    List<List<dynamic>> rows = [];
+    
+    // SpreadSheet Column Headers Matching Requirements Exactly
+    rows.add([
+      "Batch Number",
+      "Client Name",
+      "Job Name",
+      "Department/Division",
+      "Total Logged Processing Minutes",
+      "Completed Output Volume",
+      "Anomalies & Defect Loss % Flags",
+      "Delay / Halt Constraints Captured"
+    ]);
+
+    if (state.batches.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("No operational batch data available to generate spreadsheet."), backgroundColor: Colors.orange)
+      );
+      return;
+    }
+
+    // Process each batch to calculate times, yields, and collect issues
+    for (var batch in state.batches) {
+      final relatedLogs = state.rawHourlyLogs.where((l) => l['batch_no'].toString() == batch.batchNo).toList();
+      
+      String raisedAnomalies = "";
+      String delayComments = "";
+      int totalEstimatedDuration = relatedLogs.length * 60; // Approximate processing cycle per hourly milestone chunks
+
+      for (var log in relatedLogs) {
+        if (log['comments'] != null && log['comments'].toString().trim().isNotEmpty) {
+          delayComments += "[Comment]: ${log['comments']} | ";
+        }
+        
+        // Extract and format numerical issue loss percentages
+        if (log['defects'] != null && log['defects'] is Map) {
+          final Map defectMap = log['defects'];
+          defectMap.forEach((key, value) {
+            double numericVal = double.tryParse(value.toString()) ?? 0.0;
+            if (numericVal > 0) {
+              raisedAnomalies += "$key: ${numericVal.toStringAsFixed(0)}% loss | ";
+            }
+          });
+        }
+      }
+
+      rows.add([
+        batch.batchNo,
+        batch.clientName,
+        batch.jobName,
+        batch.status == 'OPEN' ? 'Active Floor Assembly Node' : 'Completed Dispatch Routing',
+        totalEstimatedDuration,
+        batch.targetQty,
+        raisedAnomalies.isEmpty ? "No Issues Flagged" : raisedAnomalies,
+        delayComments.isEmpty ? "No Delay Logs Recorded" : delayComments
+      ]);
+    }
+
+    try {
+      String csvData = const ListToCsvConverter().convert(rows);
+      final directory = await getApplicationDocumentsDirectory();
+      final file = File('${directory.path}/Mishon_EMS_Batch_CycleTime_Report.csv');
+      await file.writeAsString(csvData);
+
+      if (file.existsSync()) {
+        await Share.shareXFiles([XFile(file.path)], text: 'Mishon EMS Automated Cycle-Time & Delay Analytics Report');
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Spreadsheet compilation error: $e"), backgroundColor: Colors.red)
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final stateEngine = Provider.of<EMSStateEngine>(context);
     final String role = (stateEngine.currentUser?.role ?? 'operator').trim().toLowerCase();
 
-    // Check privileges: Route operators and supervisors to the simplified shopfloor layout
+    // Route operators and floor supervisors directly to the simplified, contextual shopfloor UI
     if (role != 'admin' && role != 'manager') {
       return const OperatorSupervisorHub();
     }
@@ -41,9 +123,12 @@ class DashboardScreen extends StatelessWidget {
         foregroundColor: Colors.white,
         actions: [
           IconButton(
+            icon: const Icon(Icons.download, tooltip: "Export Excel Report"),
+            onPressed: () => _exportOperationalBatchReport(context, stateEngine),
+          ),
+          IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () {
-              // ISSUE #4 FIX: Call centralized session purge to clear historical logs and arrays safely
               stateEngine.clearSession();
               Navigator.pushReplacementNamed(context, '/login');
             },
@@ -150,7 +235,7 @@ class DashboardScreen extends StatelessWidget {
 }
 
 // ============================================================================
-// MODULE 2: RE-ARCHITECTED SUB-DASHBOARD FOR OPERATORS & SUPERVISORS
+// MODULE 2: SUB-DASHBOARD FOR OPERATORS & SUPERVISORS
 // ============================================================================
 
 class OperatorSupervisorHub extends StatelessWidget {
@@ -173,7 +258,6 @@ class OperatorSupervisorHub extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () {
-              // ISSUE #4 FIX: Call centralized session purge to clear historical logs and arrays safely
               stateEngine.clearSession();
               Navigator.pushReplacementNamed(context, '/login');
             },
@@ -290,10 +374,8 @@ class _OperationalAnalyticsMatrixViewState extends State<OperationalAnalyticsMat
     final String currentRole = (state.currentUser?.role ?? 'operator').trim().toLowerCase();
     final bool isManagement = (currentRole == 'admin' || currentRole == 'manager');
 
-    // Only allow open batches to receive new targets inside management module
     final activeBatches = state.batches.where((b) => b.status == 'OPEN').toList();
 
-    // Visibility Scoping: Workers see targeted items matching their node assignment; Management sweeps all.
     final displayTargets = state.targetingMatrix.where((t) {
       if (isManagement) return true;
       return t.team?.trim() == state.currentUser?.team?.trim() && t.segment?.trim() == state.currentUser?.segment?.trim();
@@ -311,7 +393,6 @@ class _OperationalAnalyticsMatrixViewState extends State<OperationalAnalyticsMat
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // MANAGEMENT TARGET ASSIGNMENT MODULE
             if (isManagement) ...[
               const Text(
                 "Establish New Shop Floor Target Constraint",
@@ -334,7 +415,6 @@ class _OperationalAnalyticsMatrixViewState extends State<OperationalAnalyticsMat
                     child: DropdownButtonFormField<String>(
                       value: _segmentTarget,
                       decoration: const InputDecoration(labelText: "Floor Segment Node", border: OutlineInputBorder()),
-                      // ISSUE #2 & #3 FIX: Changed to standardized 'Through hole' definition
                       items: ["SMT", "Through hole", "None"].map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
                       onChanged: (v) => setState(() => _segmentTarget = v!),
                     ),
@@ -379,8 +459,6 @@ class _OperationalAnalyticsMatrixViewState extends State<OperationalAnalyticsMat
                                 "target_qty": q
                               }),
                             );
-                            
-                            // ISSUE #1 FIX: Added mounted check to prevent context state memory leaks
                             if (res.statusCode == 200 && mounted) {
                               await state.fetchAndSyncFromBackend();
                               _targetQtyController.clear();
@@ -410,7 +488,6 @@ class _OperationalAnalyticsMatrixViewState extends State<OperationalAnalyticsMat
               const Divider(height: 40, thickness: 1.5),
             ],
 
-            // SECTION 1: COMPARATIVE PERFORMANCE METRICS & GAUGES
             const Text(
               "Comparative Yield Performance vs Target Bounds", 
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF004d4d)),
@@ -420,7 +497,6 @@ class _OperationalAnalyticsMatrixViewState extends State<OperationalAnalyticsMat
                 ? const Card(child: Padding(padding: EdgeInsets.all(16.0), child: Text("No tracking targets registered within your visibility layer.", style: TextStyle(color: Colors.grey))))
                 : Column(
                     children: displayTargets.map((tm) {
-                      // Sum production output for this specific batch from the runtime engine counter cache
                       int totalCompleted = 0;
                       if (state.processingCounters.containsKey(tm.batchNo)) {
                         final internalSideMap = state.processingCounters[tm.batchNo];
@@ -452,11 +528,7 @@ class _OperationalAnalyticsMatrixViewState extends State<OperationalAnalyticsMat
                                     ),
                                     child: Text(
                                       isBelowTarget ? "LOW YIELD ALERT" : "TARGET SATISFIED",
-                                      style: TextStyle(
-                                        fontSize: 10, 
-                                        fontWeight: FontWeight.bold, 
-                                        color: isBelowTarget ? Colors.amber.shade900 : Colors.green.shade900,
-                                      ),
+                                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: isBelowTarget ? Colors.amber.shade900 : Colors.green.shade900),
                                     ),
                                   ),
                                 ],
@@ -487,22 +559,43 @@ class _OperationalAnalyticsMatrixViewState extends State<OperationalAnalyticsMat
 
             const Divider(height: 40, thickness: 1.5),
 
-            // SECTION 2: LIVE STREAM TERMINAL VIEW FOR HOURLY LOG PACKETS
             const Text(
-              "Live Production & QC Hourly Status Stream Logs",
+              "Live Production, QC & Shift Stream Logs",
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF004d4d)),
             ),
             const SizedBox(height: 12),
             state.rawHourlyLogs.isEmpty
-                ? const Card(child: Padding(padding: EdgeInsets.all(16.0), child: Text("No live hourly records emitted from assembly lines yet.", style: TextStyle(color: Colors.grey))))
+                ? const Card(child: Padding(padding: EdgeInsets.all(16.0), child: Text("No live logs emitted from assembly lines or shift gates yet.", style: TextStyle(color: Colors.grey))))
                 : ListView.builder(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
                     itemCount: state.rawHourlyLogs.length,
                     itemBuilder: (context, index) {
-                      // Reverse structural reader index to map latest packets directly at topmost row
                       final log = state.rawHourlyLogs[state.rawHourlyLogs.length - 1 - index];
                       
+                      // 1) SHIFT ATTENDANCE TRACKING DETECTOR
+                      bool isShiftPunch = log.containsKey('punch_type') || log['comments'].toString().contains('SHIFT');
+
+                      if (isShiftPunch) {
+                        String type = log['punch_type']?.toString() ?? 'SHIFT TRANSACTION';
+                        String op = log['operator_username']?.toString() ?? 'System';
+                        String ts = log['log_timestamp']?.toString() ?? '';
+                        return Card(
+                          margin: const EdgeInsets.symmetric(vertical: 6),
+                          color: const Color(0xFFF0FDF4),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            side: const BorderSide(color: Colors.greenAccent, width: 1.5),
+                          ),
+                          child: ListTile(
+                            leading: const Icon(Icons.alarm, color: Colors.green, size: 28),
+                            title: Text("Attendance: $type", style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF166534))),
+                            subtitle: Text("Operator Node: $op\nTimestamp Marker: $ts"),
+                          ),
+                        );
+                      }
+
+                      // 2) STANDARD PRODUCTION HOURLY LOGS WITH SECURE DEFECT PERCENT CAPTURES
                       String logBatch = log['batch_no']?.toString() ?? '';
                       String operator = log['operator_username']?.toString() ?? 'Unknown';
                       String side = log['side']?.toString() ?? 'TOP';
@@ -510,14 +603,72 @@ class _OperationalAnalyticsMatrixViewState extends State<OperationalAnalyticsMat
                       String comment = log['comments']?.toString() ?? '';
                       String timestamp = log['log_timestamp']?.toString() ?? '';
 
+                      List<String> activeDefectLosses = [];
+                      if (log['defects'] != null && log['defects'] is Map) {
+                        final Map defectMap = log['defects'];
+                        defectMap.forEach((key, value) {
+                          double val = double.tryParse(value.toString()) ?? 0.0;
+                          if (val > 0) {
+                            activeDefectLosses.add("$key: ${val.toStringAsFixed(0)}% Loss");
+                          }
+                        });
+                      }
+
+                      bool hasAnomalies = activeDefectLosses.isNotEmpty || 
+                                          comment.toLowerCase().contains('error') || 
+                                          comment.toLowerCase().contains('halt');
+
                       return Card(
-                        margin: const EdgeInsets.symmetric(vertical: 4),
-                        color: Colors.white,
-                        child: ListTile(
-                          leading: const Icon(Icons.history_edu, color: Color(0xFF008080)),
-                          title: Text("Batch #$logBatch ➔ $qty Units ($side Layer)"),
-                          subtitle: Text("Operator: $operator\nComments: $comment\nTime: $timestamp"),
-                          isThreeLine: true,
+                        margin: const EdgeInsets.symmetric(vertical: 6),
+                        color: hasAnomalies ? const Color(0xFFFFF5F5) : Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          side: BorderSide(color: hasAnomalies ? Colors.red.shade300 : Colors.grey.shade200, width: hasAnomalies ? 1.5 : 1),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text("Batch #$logBatch ➔ $qty Pcs ($side Side)", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                  if (hasAnomalies)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(color: Colors.red.shade100, borderRadius: BorderRadius.circular(4)),
+                                      child: const Text("ANOMALY FLAG", style: TextStyle(color: Colors.red, fontSize: 10, fontWeight: FontWeight.bold)),
+                                    ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              Text("Operator Sign-Off: $operator", style: const TextStyle(fontSize: 12, color: Colors.black87)),
+                              
+                              if (activeDefectLosses.isNotEmpty) ...[
+                                const SizedBox(height: 8),
+                                const Text("Flagged Yield Loss Rates:", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.red)),
+                                const SizedBox(height: 4),
+                                // Bounded constraint wrapper to eliminate any horizontal list view leakage
+                                Wrap(
+                                  spacing: 6,
+                                  runSpacing: 4,
+                                  children: activeDefectLosses.map((defText) => Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(4)),
+                                    child: Text(defText, style: TextStyle(fontSize: 11, color: Colors.red.shade900, fontWeight: FontWeight.w600)),
+                                  )).toList(),
+                                ),
+                              ],
+
+                              if (comment.isNotEmpty) ...[
+                                const SizedBox(height: 8),
+                                Text("Operator Comments: \"$comment\"", style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: hasAnomalies ? Colors.red.shade800 : Colors.black54)),
+                              ],
+                              const Divider(height: 12),
+                              Text("Log Timestamp: $timestamp", style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
+                            ],
+                          ),
                         ),
                       );
                     },
