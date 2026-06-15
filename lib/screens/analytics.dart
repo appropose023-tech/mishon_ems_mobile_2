@@ -31,8 +31,10 @@ class _OperationalAnalyticsMatrixViewState extends State<OperationalAnalyticsMat
     final String currentRole = (state.currentUser?.role ?? 'operator').trim().toLowerCase();
     final bool isManagement = (currentRole == 'admin' || currentRole == 'manager');
 
+    // Only allow open batches to receive new targets inside management module
     final activeBatches = state.batches.where((b) => b.status == 'OPEN').toList();
 
+    // Target Filtering Rule: Workers see targets matching their segment/team; Management sees all.
     final displayTargets = state.targetingMatrix.where((t) {
       if (isManagement) return true;
       return t.team == state.currentUser?.team && t.segment == state.currentUser?.segment;
@@ -50,6 +52,7 @@ class _OperationalAnalyticsMatrixViewState extends State<OperationalAnalyticsMat
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // MANAGEMENT TARGET ASSIGNMENT MODULE
             if (isManagement) ...[
               const Text(
                 "Establish New Shop Floor Target Constraint",
@@ -131,7 +134,7 @@ class _OperationalAnalyticsMatrixViewState extends State<OperationalAnalyticsMat
                                 const SnackBar(content: Text("Failed to save target entry bounds securely."), backgroundColor: Colors.red)
                               );
                             }
-                          } finally {
+                          } finaly {
                             if (mounted) {
                               setState(() => _isProcessingTarget = false);
                             }
@@ -147,6 +150,7 @@ class _OperationalAnalyticsMatrixViewState extends State<OperationalAnalyticsMat
               const Divider(height: 40, thickness: 1.5),
             ],
 
+            // 1) PERFORMANCE MONITORING (TARGET VS LIVE YIELD WITH WARNING ALERTS)
             const Text(
               "Comparative Yield Performance vs Target Bounds", 
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF004d4d)),
@@ -156,6 +160,7 @@ class _OperationalAnalyticsMatrixViewState extends State<OperationalAnalyticsMat
                 ? const Card(child: Padding(padding: EdgeInsets.all(16.0), child: Text("No tracking targets registered within your visibility layer.", style: TextStyle(color: Colors.grey))))
                 : Column(
                     children: displayTargets.map((tm) {
+                      // Sum production output for this specific batch from the engine counter cache
                       int totalCompleted = 0;
                       if (state.processingCounters.containsKey(tm.batchNo)) {
                         final internalSideMap = state.processingCounters[tm.batchNo];
@@ -166,10 +171,7 @@ class _OperationalAnalyticsMatrixViewState extends State<OperationalAnalyticsMat
 
                       return Card(
                         margin: const EdgeInsets.symmetric(vertical: 6),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8), 
-                          side: BorderSide(color: isBelowTarget ? Colors.amber.shade300 : Colors.green.shade300, width: 1),
-                        ),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: isBelowTarget ? Colors.amber.shade300 : Colors.green.shade300, width: 1)),
                         child: Padding(
                           padding: const EdgeInsets.all(14.0),
                           child: Column(
@@ -187,11 +189,7 @@ class _OperationalAnalyticsMatrixViewState extends State<OperationalAnalyticsMat
                                     ),
                                     child: Text(
                                       isBelowTarget ? "LOW YIELD ALERT" : "TARGET SATISFIED",
-                                      style: TextStyle(
-                                        fontSize: 10, 
-                                        fontWeight: FontWeight.bold, 
-                                        color: isBelowTarget ? Colors.amber.shade900 : Colors.green.shade900,
-                                      ),
+                                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: isBelowTarget ? Colors.amber.shade900 : Colors.green.shade900),
                                     ),
                                   ),
                                 ],
@@ -222,6 +220,7 @@ class _OperationalAnalyticsMatrixViewState extends State<OperationalAnalyticsMat
 
             const Divider(height: 40, thickness: 1.5),
 
+            // 2) PRODUCTION & QC HOURLY LOGS TERMINAL HUB VIEW
             const Text(
               "Live Production & QC Hourly Status Stream Logs",
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF004d4d)),
@@ -234,7 +233,7 @@ class _OperationalAnalyticsMatrixViewState extends State<OperationalAnalyticsMat
                     physics: const NeverScrollableScrollPhysics(),
                     itemCount: state.rawHourlyLogs.length,
                     itemBuilder: (context, index) {
-                      // Reverse read tracking to preserve newest elements on top
+                      // Read items in reverse order to keep latest logs at the top
                       final log = state.rawHourlyLogs[state.rawHourlyLogs.length - 1 - index];
                       
                       String logBatch = log['batch_no']?.toString() ?? 'N/A';
@@ -244,7 +243,7 @@ class _OperationalAnalyticsMatrixViewState extends State<OperationalAnalyticsMat
                       String comment = log['comments']?.toString() ?? '';
                       String timestamp = log['log_timestamp']?.toString() ?? '';
 
-                      // Extract and map structural checked issues sent from floor checklists
+                      // Extract and map checked issue arrays securely from server entries
                       List<String> activeDefects = [];
                       if (log['defects'] != null && log['defects'] is Map) {
                         final Map defectMap = log['defects'];
@@ -287,7 +286,7 @@ class _OperationalAnalyticsMatrixViewState extends State<OperationalAnalyticsMat
                               const SizedBox(height: 6),
                               Text("Operator Sign-Off: $operator", style: const TextStyle(fontSize: 12, color: Colors.black87)),
                               
-                              // Structural Rendering for Checked Defect Items
+                              // Visual layout updates for checkbox discrepancies
                               if (activeDefects.isNotEmpty) ...[
                                 const SizedBox(height: 8),
                                 const Text("Flagged Structural Anomalies:", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.red)),
@@ -306,7 +305,7 @@ class _OperationalAnalyticsMatrixViewState extends State<OperationalAnalyticsMat
 
                               if (comment.isNotEmpty) ...[
                                 const SizedBox(height: 8),
-                                Text("Operator Comments: \"$comment\"", style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: explicitlyHasIssues ? Colors.red.shade800 : Colors.black64)),
+                                Text("Operator Comments: \"$comment\"", style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: explicitlyHasIssues ? Colors.red.shade800 : Colors.black54)),
                               ],
                               const Divider(height: 12),
                               Text("Log Timestamp: $timestamp", style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
