@@ -123,7 +123,8 @@ class DashboardScreen extends StatelessWidget {
         foregroundColor: Colors.white,
         actions: [
           IconButton(
-            icon: const Icon(Icons.download, tooltip: "Export Excel Report"),
+            icon: const Icon(Icons.download),
+            tooltip: "Export Excel Report", // 🟢 Tooltip parameter assigned correctly to IconButton instead of Icon
             onPressed: () => _exportOperationalBatchReport(context, stateEngine),
           ),
           IconButton(
@@ -228,7 +229,7 @@ class DashboardScreen extends StatelessWidget {
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
             ),
           ],
-        ),
+         ),
       ),
     );
   }
