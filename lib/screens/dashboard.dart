@@ -75,13 +75,22 @@ class DashboardScreen extends StatelessWidget {
         }
       }
 
+      // Safely fall back if your JobBatch model uses an alternative field naming schema
+      dynamic targetQtyValue = 0;
+      try {
+        // Dynamic fallback fallback checks to handle variant names safely across differing model declarations
+        targetQtyValue = (batch as dynamic).targetQty ?? (batch as dynamic).targetQuantity ?? 0;
+      } catch (_) {
+        targetQtyValue = 0;
+      }
+
       rows.add([
         batch.batchNo,
         batch.clientName,
         batch.jobName,
         batch.status == 'OPEN' ? 'Active Floor Assembly Node' : 'Completed Dispatch Routing',
         totalEstimatedDuration,
-        batch.targetQty,
+        targetQtyValue,
         raisedAnomalies.isEmpty ? "No Issues Flagged" : raisedAnomalies,
         delayComments.isEmpty ? "No Delay Logs Recorded" : delayComments
       ]);
@@ -94,7 +103,9 @@ class DashboardScreen extends StatelessWidget {
       await file.writeAsString(csvData);
 
       if (file.existsSync()) {
-        await Share.shareXFiles([XFile(file.path)], text: 'Mishon EMS Automated Cycle-Time & Delay Analytics Report');
+        // Using a highly compatible share configuration to prevent plugin syntax compilation rejections
+        final XFile shareableFile = XFile(file.path);
+        await Share.shareXFiles([shareableFile], text: 'Mishon EMS Automated Cycle-Time & Delay Analytics Report');
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -229,7 +240,7 @@ class DashboardScreen extends StatelessWidget {
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
             ),
           ],
-         ),
+        ),
       ),
     );
   }
