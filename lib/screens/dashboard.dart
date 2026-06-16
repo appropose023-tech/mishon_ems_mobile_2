@@ -124,7 +124,7 @@ class DashboardScreen extends StatelessWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.download),
-            tooltip: "Export Excel Report", // 🟢 Tooltip parameter assigned correctly to IconButton instead of Icon
+            tooltip: "Export Excel Report",
             onPressed: () => _exportOperationalBatchReport(context, stateEngine),
           ),
           IconButton(
@@ -650,7 +650,6 @@ class _OperationalAnalyticsMatrixViewState extends State<OperationalAnalyticsMat
                                 const SizedBox(height: 8),
                                 const Text("Flagged Yield Loss Rates:", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.red)),
                                 const SizedBox(height: 4),
-                                // Bounded constraint wrapper to eliminate any horizontal list view leakage
                                 Wrap(
                                   spacing: 6,
                                   runSpacing: 4,
