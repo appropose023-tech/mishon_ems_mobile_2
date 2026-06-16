@@ -7,7 +7,8 @@ import 'package:intl/intl.dart';
 import 'package:csv/csv.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
- 
+
+
 
 import '../app_state.dart';
 import '../models.dart';
@@ -102,11 +103,10 @@ class DashboardScreen extends StatelessWidget {
       
       // Fallback version-agnostic engine shares via direct text layout to guarantee zero dependency compilation blockages
      
-     await SharePlus.instance.share(
-        ShareParams(
-            text: csvData,
-            subject: 'Mishon EMS Automated Cycle-Time & Delay Analytics Report',
-       ),
+     String csvData = ListToCsvConverter().convert(rows);
+     await Share.share(
+        csvData,
+        subject: 'Mishon EMS Automated Cycle-Time & Delay Analytics Report',
      );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
