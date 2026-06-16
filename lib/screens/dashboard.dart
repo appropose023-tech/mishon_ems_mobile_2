@@ -99,21 +99,20 @@ class DashboardScreen extends StatelessWidget {
     }
 
     try {
-      String csvData = ListToCsvConverter().convert(rows);
-      
-      // Fallback version-agnostic engine shares via direct text layout to guarantee zero dependency compilation blockages
-     
-     String csvData = ListToCsvConverter().convert(rows);
-     await Share.share(
-        csvData,
-        subject: 'Mishon EMS Automated Cycle-Time & Delay Analytics Report',
-     );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Spreadsheet compilation error: $e"), backgroundColor: Colors.red)
+      final String csvData = ListToCsvConverter().convert(rows);
+
+      await Share.share(
+         csvData,
+         subject: 'Mishon EMS Automated Cycle-Time & Delay Analytics Report',
       );
-    }
-  }
+    } catch (e) {
+    ScaffoldMessenger.of(context).showSnackBar(
+       SnackBar(
+          content: Text("Spreadsheet compilation error: $e"),
+          backgroundColor: Colors.red,
+       ),
+    );
+   }
 
   @override
   Widget build(BuildContext context) {
