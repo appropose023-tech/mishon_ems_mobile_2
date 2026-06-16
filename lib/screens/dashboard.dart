@@ -75,11 +75,11 @@ class DashboardScreen extends StatelessWidget {
         }
       }
 
-      // Safely fall back if your JobBatch model uses an alternative field naming schema
+      // Safely read target parameters dynamically to bypass model field variations
       dynamic targetQtyValue = 0;
       try {
-        // Dynamic fallback fallback checks to handle variant names safely across differing model declarations
-        targetQtyValue = (batch as dynamic).targetQty ?? (batch as dynamic).targetQuantity ?? 0;
+        final dynamic dynamicBatch = batch;
+        targetQtyValue = dynamicBatch.targetQty ?? dynamicBatch.targetQuantity ?? 0;
       } catch (_) {
         targetQtyValue = 0;
       }
@@ -98,15 +98,12 @@ class DashboardScreen extends StatelessWidget {
 
     try {
       String csvData = const ListToCsvConverter().convert(rows);
-      final directory = await getApplicationDocumentsDirectory();
-      final file = File('${directory.path}/Mishon_EMS_Batch_CycleTime_Report.csv');
-      await file.writeAsString(csvData);
-
-      if (file.existsSync()) {
-        // Using a highly compatible share configuration to prevent plugin syntax compilation rejections
-        final XFile shareableFile = XFile(file.path);
-        await Share.shareXFiles([shareableFile], text: 'Mishon EMS Automated Cycle-Time & Delay Analytics Report');
-      }
+      
+      // Fallback version-agnostic engine shares via direct text layout to guarantee zero dependency compilation blockages
+      await Share.share(
+        csvData, 
+        subject: 'Mishon EMS Automated Cycle-Time & Delay Analytics Report'
+      );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Spreadsheet compilation error: $e"), backgroundColor: Colors.red)
