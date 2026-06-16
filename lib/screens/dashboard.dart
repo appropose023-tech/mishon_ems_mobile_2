@@ -97,7 +97,7 @@ class DashboardScreen extends StatelessWidget {
     }
 
     try {
-      String csvData = const ListToCsvConverter().convert(rows);
+      String csvData = ListToCsvConverter().convert(rows);
       
       // Fallback version-agnostic engine shares via direct text layout to guarantee zero dependency compilation blockages
       await Share.share(
