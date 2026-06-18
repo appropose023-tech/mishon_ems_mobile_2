@@ -126,6 +126,15 @@ class _IdentityGatewayPortalState extends State<IdentityGatewayPortal> {
                                   onPressed: () => _processAuthentication(context),
                                   child: const Text("AUTHENTICATE SYSTEM ACCESS", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                                 ),
+                              // Insert this standard recovery sheet beneath your ElevatedButton widget:
+                              const SizedBox(height: 12),
+                              TextButton(
+                                 onPressed: () => _showPasswordResetSheet(context),
+                                 child: const Text(
+                                     "Forgot Password / Reset Security Key?",
+                                     style: TextStyle(color: Color(0xFF004d4d), fontWeight: FontWeight.w600, decoration: TextDecoration.underline),
+                                 ),
+                              ),
                         ],
                       ),
                     ),
