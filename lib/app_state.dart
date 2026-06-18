@@ -255,6 +255,46 @@ class EMSStateEngine extends ChangeNotifier {
       return "Network communication failure: $e";
     }
   }
+/// Dispatches password modifications safely across network serialization boundaries
+  Future<String?> executePasswordReset(String username, String newPassword) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/forgot_password'),
+        headers: {"Content-Type": "application/json"},
+        body: json.encode({
+          "username": username,
+          "new_password": newPassword,
+        }),
+      );
+      final data = json.decode(response.body);
+      if (response.statusCode == 200 && data['success'] == true) {
+        return null; // Signals successful operation
+      } else {
+        return data['message'] ?? "Authorization error altering security parameter.";
+      }
+    } catch (e) {
+      return "Network system transport failure: $e";
+    }
+  }
+
+  /// Pulls clean client view matrices by referencing the target Batch sequence identifier
+  Future<Map<String, dynamic>?> fetchClientProjectView(String batchNo) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/client_dashboard?batch_no=$batchNo'),
+      );
+      final data = json.decode(response.body);
+      if (response.statusCode == 200 && data['success'] == true) {
+        return data['data'] as Map<String, dynamic>;
+      } else {
+        debugPrint("Client Pipeline Parsing Exception: ${data['message']}");
+        return null;
+      }
+    } catch (e) {
+      debugPrint("Client Fetch failure context transport: $e");
+      return null;
+    }
+  }
 
   void clearSession() {
     currentUser = null;
