@@ -112,7 +112,7 @@ class _ClientOperationalTrackingConsoleState extends State<ClientOperationalTrac
       child: ListTile(
         leading: Icon(analyticalIcon, color: const Color(0xFF008080)),
         title: Text(title, style: const TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w500)),
-        subtitle: Text(dataContent, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.blackc87)),
+        subtitle: Text(dataContent, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black87)),
       ),
     );
   }
