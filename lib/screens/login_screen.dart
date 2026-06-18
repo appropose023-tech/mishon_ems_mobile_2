@@ -55,6 +55,53 @@ class _IdentityGatewayPortalState extends State<IdentityGatewayPortal> {
     }
   }
 
+  void _showPasswordResetSheet(BuildContext context) {
+    final TextEditingController userResetCtrl = TextEditingController();
+    final TextEditingController passResetCtrl = TextEditingController();
+    final state = Provider.of<EMSStateEngine>(context, listen: false);
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFFF8FAFC),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (context) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+          top: 20, left: 16, right: 16
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text("Security Key Recovery & Reset", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF004d4d))),
+            const SizedBox(height: 12),
+            TextField(controller: userResetCtrl, decoration: const InputDecoration(labelText: "Confirm Username / Employee ID ID")),
+            TextField(controller: passResetCtrl, obscureText: true, decoration: const InputDecoration(labelText: "Assign New Password String")),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF008080)),
+              onPressed: () async {
+                if(userResetCtrl.text.isEmpty || passResetCtrl.text.isEmpty) return;
+                final err = await state.executePasswordReset(userResetCtrl.text.trim(), passResetCtrl.text.trim());
+                if (context.mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(err ?? "Security credentials updated cleanly across nodes."),
+                      backgroundColor: err == null ? Colors.green : Colors.red,
+                    ),
+                  );
+                }
+              },
+              child: const Text("UPDATE AUTHENTICATION CREDENTIALS", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            )
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
