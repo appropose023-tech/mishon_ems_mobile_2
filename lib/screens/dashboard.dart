@@ -124,7 +124,10 @@ class DashboardScreen extends StatelessWidget {
     if (role != 'admin' && role != 'manager') {
       return const OperatorSupervisorHub();
     }
-
+    // Context Gateway Verification Strategy For Client Scopes
+    if (role == 'client') {
+      return const ClientOperationalTrackingConsole();
+    }
     final bool isAdmin = (role == 'admin');
 
     return Scaffold(
